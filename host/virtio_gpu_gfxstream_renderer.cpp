@@ -27,6 +27,7 @@ extern "C" {
 #include "gfxstream/host/features.h"
 #include "gfxstream/host/tracing.h"
 #include "gfxstream/host/address_space_graphics.h"
+#include "gfxstream/host/external_object_manager.h"
 #include "gfxstream/memory/UdmabufCreator.h"
 #include "gfxstream/system/System.h"
 #ifdef CONFIG_AEMU
@@ -465,6 +466,11 @@ VG_EXPORT int stream_renderer_export_blob(uint32_t res_handle,
                           "stream_renderer_export_blob()");
 
     return sFrontend()->exportBlob(res_handle, handle);
+}
+
+VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t blob_id,
+                                                     void* addr, uint32_t caching) {
+    gfxstream::host::ExternalObjectManager::get()->addMapping(ctx_id, blob_id, addr, caching);
 }
 
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut) {

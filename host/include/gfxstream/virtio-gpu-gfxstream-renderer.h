@@ -232,6 +232,13 @@ VG_EXPORT int stream_renderer_create_blob(uint32_t ctx_id, uint32_t res_handle,
 VG_EXPORT int stream_renderer_export_blob(uint32_t res_handle,
                                           struct stream_renderer_handle* handle);
 
+// Registers a VMM-owned mapping for a blob resource, to be consumed by the
+// resource's (re)creation. Used on restore to hand gfxstream the live
+// transport memory (e.g. the ASG ring the client keeps mapping) instead of
+// letting the restored resource allocate fresh memory the client cannot see.
+VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t blob_id,
+                                                     void* addr, uint32_t caching);
+
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut);
 VG_EXPORT int stream_renderer_resource_unmap(uint32_t res_handle);
 
