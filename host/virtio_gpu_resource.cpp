@@ -963,12 +963,25 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
         auto descriptorInfoOpt = ExternalObjectManager::get()->removeBlobDescriptorInfo(
             snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
         if (!descriptorInfoOpt) {
-            GFXSTREAM_ERROR("Failed to restore resource: failed to find blob descriptor info.");
-            return std::nullopt;
+            // The descriptor was consumed by the original mapping (or the VMM
+            // restarted). Re-create host memory from the blob args so the
+            // resource has valid backing; content comes from the restored
+            // guest memory / replayed calls.
+            if (!resource.mCreateBlobArgs) {
+                GFXSTREAM_ERROR("Failed to restore resource: no blob args either.");
+                return std::nullopt;
+            }
+            auto ringBlobOpt = RingBlob::CreateWithShmem(
+                resource.mId, resource.mCreateBlobArgs->size);
+            if (!ringBlobOpt) {
+                GFXSTREAM_ERROR("Failed to restore resource: re-alloc failed.");
+                return std::nullopt;
+            }
+            resource.mBlobMemory.emplace(std::move(ringBlobOpt));
+        } else {
+            resource.mBlobMemory.emplace(
+                std::make_shared<BlobDescriptorInfo>(std::move(*descriptorInfoOpt)));
         }
-
-        resource.mBlobMemory.emplace(
-            std::make_shared<BlobDescriptorInfo>(std::move(*descriptorInfoOpt)));
     } else if (resourceSnapshot.has_external_memory_mapping()) {
         const auto& snapshotDescriptorInfo = resourceSnapshot.external_memory_mapping();
 

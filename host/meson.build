@@ -75,6 +75,11 @@ files_lib_gfxstream_backend = files(
   'virtio_gpu_gfxstream_renderer.cpp',
   'virtio_gpu_pipe.cpp',
   'virtio_gpu_resource.cpp',
+  'virtio_gpu_context_snapshot.pb.cc',
+  'virtio_gpu_frontend_snapshot.pb.cc',
+  'virtio_gpu_resource_snapshot.pb.cc',
+  'virtio_gpu_ring_blob_snapshot.pb.cc',
+  'virtio_gpu_timelines_snapshot.pb.cc',
   'virtio_gpu_ring_blob.cpp',
   'virtio_gpu_timelines.cpp',
   'vsync_thread.cpp',
@@ -132,6 +137,8 @@ gfxstream_backend_cpp_args = [
   '-Wno-unused-variable',
   '-Wno-unused-function',
   '-DVK_GFXSTREAM_STRUCTURE_TYPE_EXT',
+  '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_SUPPORT=1',
+  '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT=1',
 ]
 
 if host_machine.system() == 'windows'
@@ -144,6 +151,10 @@ elif host_machine.system() == 'linux'
 endif
 
 deps_gfxstream_backend = []
+protobuf_dep = dependency('protobuf', method: 'pkg-config', required: false)
+if not protobuf_dep.found()
+  protobuf_dep = dependency('protobuf')
+endif
 
 link_args_gfxstream_backend = []
 
@@ -173,7 +184,7 @@ gfxstream_backend = library(
   objcpp_args: gfxstream_host_args + gfxstream_backend_cpp_args,
   include_directories: [inc_gfxstream_backend],
   gnu_symbol_visibility: 'default',
-  dependencies: deps_gfxstream_backend,
+  dependencies: deps_gfxstream_backend + [protobuf_dep],
   link_with: link_gfxstream_backend,
   link_args : link_args_gfxstream_backend,
   version: '0.1.2',
