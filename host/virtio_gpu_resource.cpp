@@ -989,6 +989,19 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
     } else if (resourceSnapshot.has_external_memory_descriptor()) {
         const auto& snapshotDescriptorInfo = resourceSnapshot.external_memory_descriptor();
 
+        // GUEST guest-handle blobs: at runtime the descriptor only lives in
+        // the external object manager (the resource itself has no blob
+        // memory) and it is consumed by the replayed vkAllocateMemory. Leave
+        // it in place for the replay here; the resource needs no blob memory
+        // (matches the runtime create path).
+        const bool guestHandleBlob =
+            resource.mCreateBlobArgs &&
+            resource.mCreateBlobArgs->blob_mem == STREAM_BLOB_MEM_GUEST &&
+            (resource.mCreateBlobArgs->blob_flags & STREAM_BLOB_FLAG_CREATE_GUEST_HANDLE);
+        if (guestHandleBlob) {
+            return resource;
+        }
+
         auto descriptorInfoOpt = ExternalObjectManager::get()->removeBlobDescriptorInfo(
             snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
         if (!descriptorInfoOpt) {
