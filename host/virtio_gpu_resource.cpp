@@ -951,12 +951,26 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
     }
 
     if (resourceSnapshot.has_ring_blob()) {
-        auto resourceRingBlobOpt = RingBlob::Restore(resourceSnapshot.ring_blob());
-        if (!resourceRingBlobOpt) {
-            GFXSTREAM_ERROR("Failed to restore ring blob for resource %d", resource.mId);
-            return std::nullopt;
+        // The VMM may have re-attached the client's live ring memory: the
+        // client keeps mapping the pre-restore shmem and its content is
+        // restored by the guest memory snapshot, so a fresh shmem here would
+        // detach the host from the client's ring (see
+        // stream_renderer_reattach_blob_mapping).
+        std::optional<HostMemInfo> reattachedMapping = std::nullopt;
+        if (resourceSnapshot.has_latest_attached_context() && resource.mCreateBlobArgs) {
+            reattachedMapping = ExternalObjectManager::get()->removeMapping(
+                resourceSnapshot.latest_attached_context(), resource.mCreateBlobArgs->blob_id);
         }
-        resource.mBlobMemory.emplace(std::move(*resourceRingBlobOpt));
+        if (reattachedMapping) {
+            resource.mBlobMemory.emplace(std::move(*reattachedMapping));
+        } else {
+            auto resourceRingBlobOpt = RingBlob::Restore(resourceSnapshot.ring_blob());
+            if (!resourceRingBlobOpt) {
+                GFXSTREAM_ERROR("Failed to restore ring blob for resource %d", resource.mId);
+                return std::nullopt;
+            }
+            resource.mBlobMemory.emplace(std::move(*resourceRingBlobOpt));
+        }
     } else if (resourceSnapshot.has_external_memory_descriptor()) {
         const auto& snapshotDescriptorInfo = resourceSnapshot.external_memory_descriptor();
 
