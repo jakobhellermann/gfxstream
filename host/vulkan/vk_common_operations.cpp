@@ -2987,6 +2987,7 @@ std::unique_ptr<VkImageCreateInfo> VkEmulation::generateColorBufferVkImageCreate
         uint32_t mipLevels) {
     const ImageSupportInfo* maybeImageSupportInfo = mImageSupportInfo.GetSupportedInfo(format);
     if (!maybeImageSupportInfo) {
+        fprintf(stderr, "TRACE: format support info MISSING for %d\n", (int)format);
         GFXSTREAM_ERROR("Format %s [%d] is not supported.", string_VkFormat(format), format);
         return nullptr;
     }
@@ -3100,8 +3101,10 @@ bool VkEmulation::createVkColorBufferLocked(uint32_t width, uint32_t height,
                                             GfxstreamFormat format,
                                             uint32_t colorBufferHandle, bool vulkanOnly,
                                             uint32_t memoryProperty, uint32_t mipLevels) {
+    fprintf(stderr, "TRACE: createVkColorBuffer enter, handle=%u format=%d\n", colorBufferHandle, (int)format);
     auto internalFormatOpt = GetInternalFormatLocked(format);
     if (!internalFormatOpt) {
+        fprintf(stderr, "TRACE: internal format lookup FAILED\n");
         const std::string formatString = ToString(format);
         GFXSTREAM_ERROR("Unsupported format %s.", formatString.c_str());
     }
@@ -3174,7 +3177,9 @@ bool VkEmulation::createVkColorBufferLocked(uint32_t width, uint32_t height,
 
     auto vk = mDvk;
 
+    fprintf(stderr, "TRACE: calling vkCreateImage, usage=0x%x tiling=%d\n", imageCi->usage, (int)imageCi->tiling);
     VkResult createRes = vk->vkCreateImage(mDevice, imageCi.get(), nullptr, &infoPtr->image);
+    fprintf(stderr, "TRACE: vkCreateImage res=%d\n", (int)createRes);
     if (createRes != VK_SUCCESS) {
         GFXSTREAM_ERROR("Failed to create Vulkan image for ColorBuffer %d, error: %s",
                         colorBufferHandle, string_VkResult(createRes));

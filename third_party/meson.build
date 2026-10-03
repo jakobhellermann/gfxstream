@@ -11,11 +11,7 @@ if use_vulkan
   endif
 endif
 
-if cc.has_header('glm/glm.hpp')
-  inc_glm = include_directories()
-else
-  inc_glm = include_directories('glm/include')
-endif
+inc_glm = include_directories('glm/include')
 
 if host_machine.system() != 'darwin'
   inc_x11_headers = include_directories('x11/include')
