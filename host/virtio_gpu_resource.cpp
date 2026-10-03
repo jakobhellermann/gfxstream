@@ -938,6 +938,21 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
             .nr_samples = createArgsSnapshot.nr_samples(),
             .flags = createArgsSnapshot.flags(),
         };
+
+        // Recreate the host-side backing (FrameBuffer buffer/color buffer and
+        // the VkEmulation state behind it): the restored resources must be
+        // usable by the snapshot replay — e.g. a replayed vkAllocateMemory
+        // with an import-buffer extension resolves against
+        // VkEmulation::mBuffers, which only this path repopulates.
+        if (resource.mResourceType == VirtioGpuResourceType::BUFFER ||
+            resource.mResourceType == VirtioGpuResourceType::COLOR_BUFFER) {
+            auto hostResourceOpt = Create(&*resource.mCreateArgs, nullptr, 0);
+            if (!hostResourceOpt) {
+                GFXSTREAM_ERROR("Failed to restore resource %d: failed to recreate host backing.",
+                                resource.mId);
+                return std::nullopt;
+            }
+        }
     }
 
     if (resourceSnapshot.has_create_blob_args()) {

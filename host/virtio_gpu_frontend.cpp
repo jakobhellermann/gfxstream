@@ -1288,15 +1288,19 @@ int VirtioGpuFrontend::restore(const char* directory) {
 
     destroyVirtioGpuObjects();
 
-    int ret = restoreRenderer(directory);
+    // The frontend resources must exist before the renderer/vulkan replay:
+    // replayed API calls (e.g. vkAllocateMemory with an import-buffer
+    // extension) resolve against host state (VkEmulation buffers) that only
+    // the frontend resource restore recreates.
+    int ret = restoreFrontend(directory);
     if (ret) {
-        GFXSTREAM_ERROR("Failed to load snapshot: failed to load renderer.");
+        GFXSTREAM_ERROR("Failed to load snapshot: failed to load frontend.");
         return ret;
     }
 
-    ret = restoreFrontend(directory);
+    ret = restoreRenderer(directory);
     if (ret) {
-        GFXSTREAM_ERROR("Failed to load snapshot: failed to load frontend.");
+        GFXSTREAM_ERROR("Failed to load snapshot: failed to load renderer.");
         return ret;
     }
 
