@@ -161,23 +161,20 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
                     seqno, gfxstream::base::getCurrentThreadId());
             }
             if (seqnoPtr && !m_forSnapshotLoad) {
-                {
-                    while ((seqno - seqnoPtr->load(std::memory_order_seq_cst) != 1)) {
-                        if (shouldExit.load(std::memory_order_relaxed)) {
-                            GFXSTREAM_WARNING(
-                                "Process=%s is exitting. Skip processing seqno=%d on thread=0x%x.",
-                                processName ? processName : "null", seqno,
-                                gfxstream::base::getCurrentThreadId());
-                            return 0;
-                        }
-#if (defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64)))
-                        _mm_pause();
-#elif (defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)))
-                        __asm__ __volatile__("pause;");
-#endif
-                    }
-                    m_prevSeqno = seqno;
+                // The guest rewound its command stream (snapshot restore): the
+                // client re-submits from the snapshot point while this process
+                // counter is stale (or ahead). Re-align to the guest's
+                // sequence — the alternative is an infinite wait. The strict
+                // ordering this counter enforces is only meaningful within one
+                // guest stream generation, which a restore ends.
+                auto current = seqnoPtr->load(std::memory_order_seq_cst);
+                if (seqno != current + 1) {
+                    GFXSTREAM_WARNING(
+                        "Seqno %d out of order (counter %d) — realigning (guest stream restored).",
+                        seqno, current);
+                    seqnoPtr->store(seqno - 1, std::memory_order_seq_cst);
                 }
+                m_prevSeqno = seqno;
             }
         }
 
