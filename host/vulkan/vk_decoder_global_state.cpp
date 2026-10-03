@@ -8183,6 +8183,33 @@ class VkDecoderGlobalState::Impl {
                 return VK_ERROR_INITIALIZATION_FAILED;
             }
 
+            // Snapshot replay: re-signal binary wait semaphores right before the
+            // replayed submission is dispatched. The snapshot is taken at a frame
+            // boundary, where all binary payloads consumed by earlier submissions
+            // are already gone — but the replay re-executes those submissions with
+            // their waits. The wholesale re-signal after the replay (see
+            // loadVkSnapshots) runs too late: the replay itself would deadlock in
+            // the driver's binary-wait handling, so this never completes.
+            if (mSnapshotState == SnapshotState::Loading) {
+                for (uint32_t i = 0; i < submitCount; i++) {
+                    for (uint32_t j = 0; j < getWaitSemaphoreCount(pSubmits[i]); j++) {
+                        VkSemaphore waitSemaphore = getWaitSemaphore(pSubmits[i], j);
+                        auto semaphoreInfo = gfxstream::base::find(mSemaphoreInfo, waitSemaphore);
+                        if (!semaphoreInfo || semaphoreInfo->isTimelineSemaphore) {
+                            continue;
+                        }
+                        if (!semaphoreInfo->isSignaled) {
+                            GFXSTREAM_INFO("snapshot replay: re-signaling binary wait semaphore %p",
+                                           waitSemaphore);
+                            StateBlock stateBlock = createSnapshotStateBlock(device);
+                            signalSemaphore(&stateBlock, waitSemaphore);
+                            releaseSnapshotStateBlock(&stateBlock);
+                            semaphoreInfo->isSignaled = true;
+                        }
+                    }
+                }
+            }
+
             deviceOpTracker = deviceInfo->deviceOpTracker.get();
 
             if (mRenderDocWithMultipleVkInstances && m_vkEmulation->supportsFrameBoundary()) {
@@ -9712,6 +9739,19 @@ class VkDecoderGlobalState::Impl {
         }
 
         BoxedHandleInfo* setHandleInfo = sBoxedHandleManager.get(poolId);
+
+        // Snapshot replay: the replayed stream can reach this set with
+        // pendingAlloc==false (as the guest saw it after an earlier live commit),
+        // while the reconstructed handle still has no host backing (underlying==0)
+        // because the allocating commit was already consumed in a previous live
+        // operation before the snapshot. Treat it as pending so the host set is
+        // lazily re-allocated instead of aborting the restore.
+        if (mSnapshotState == SnapshotState::Loading && !pendingAlloc &&
+            !setHandleInfo->underlying) {
+            GFXSTREAM_INFO("snapshot replay: lazily re-allocating descriptor set with id 0x%" PRIx64,
+                           poolId);
+            pendingAlloc = 1;
+        }
 
         if (setHandleInfo->underlying) {
             if (pendingAlloc) {
