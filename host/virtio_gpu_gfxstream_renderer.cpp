@@ -473,6 +473,13 @@ VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t b
     gfxstream::host::ExternalObjectManager::get()->addMapping(ctx_id, blob_id, addr, caching);
 }
 
+VG_EXPORT void stream_renderer_reattach_blob_descriptor(uint32_t ctx_id, uint64_t blob_id,
+                                                        int fd, uint32_t stream_handle_type) {
+    gfxstream::base::ManagedDescriptor descriptor(fd);
+    gfxstream::host::ExternalObjectManager::get()->addBlobDescriptorInfo(
+        ctx_id, blob_id, std::move(descriptor), stream_handle_type, 0, std::nullopt);
+}
+
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut) {
     GFXSTREAM_TRACE_EVENT(GFXSTREAM_TRACE_STREAM_RENDERER_CATEGORY,
                           "stream_renderer_resource_map()");

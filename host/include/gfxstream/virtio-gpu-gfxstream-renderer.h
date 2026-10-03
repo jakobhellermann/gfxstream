@@ -239,6 +239,13 @@ VG_EXPORT int stream_renderer_export_blob(uint32_t res_handle,
 VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t blob_id,
                                                      void* addr, uint32_t caching);
 
+// Re-registers a blob descriptor (fd ownership transfers to gfxstream) with
+// the external object manager, so a replayed vkAllocateMemory during restore
+// can import it again — the original descriptor was consumed by the first
+// mapping.
+VG_EXPORT void stream_renderer_reattach_blob_descriptor(uint32_t ctx_id, uint64_t blob_id,
+                                                        int fd, uint32_t stream_handle_type);
+
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut);
 VG_EXPORT int stream_renderer_resource_unmap(uint32_t res_handle);
 
