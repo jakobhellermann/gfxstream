@@ -933,6 +933,25 @@ class VkDecoderGlobalState::Impl {
 
         {
             std::lock_guard<std::mutex> lock(mMutex);
+            // After a restore the guest rewinds its command stream and
+            // re-submits from the snapshot point. Binary semaphores are
+            // consume-once: payloads consumed before the snapshot are gone,
+            // but the guest's re-submitted stream waits on them again (the
+            // producers of those signals lie before the rewind point and are
+            // not re-executed). Re-signal every binary semaphore so the first
+            // post-restore submits proceed. The sync guarantee of the first
+            // re-executed frame is lost (waits pass without the original
+            // producer having run) — accepted tradeoff for restore.
+            for (auto& [semaphore, semaphoreInfo] : mSemaphoreInfo) {
+                if (semaphoreInfo.isTimelineSemaphore) continue;
+                StateBlock stateBlock = createSnapshotStateBlock(semaphoreInfo.device);
+                signalSemaphore(&stateBlock, semaphore);
+                releaseSnapshotStateBlock(&stateBlock);
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
 
             // load mapped memory
             GFXSTREAM_DEBUG("snapshot load: mapped memory");
