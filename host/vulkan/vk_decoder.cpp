@@ -32,6 +32,7 @@
 
 #include <cstring>
 #include <functional>
+#include <map>
 #include <optional>
 #include <unordered_map>
 
@@ -78,6 +79,10 @@ class VkDecoder::Impl {
 
     void setForSnapshotLoad(bool forSnapshotLoad) { m_forSnapshotLoad = forSnapshotLoad; }
 
+    std::map<uint32_t, uint64_t> takeSnapshotReplayOpCounts() {
+        return std::move(m_replayOpCounts);
+    }
+
     size_t decode(void* buf, size_t bufsize, IOStream* stream,
                   const ProcessResources* processResources, const VkDecoderContext&);
 
@@ -94,6 +99,11 @@ class VkDecoder::Impl {
     std::optional<uint32_t> m_prevSeqno;
     bool m_queueSubmitWithCommandsEnabled = false;
     const bool m_snapshotsEnabled = false;
+
+    // Opcode histogram while in snapshot-load (replay) mode. Filled only when
+    // m_forSnapshotLoad is set; read out after the replay to log what the
+    // snapshot actually replays.
+    std::map<uint32_t, uint64_t> m_replayOpCounts;
 };
 
 VkDecoder::VkDecoder() : mImpl(new VkDecoder::Impl()) {}
@@ -110,6 +120,11 @@ size_t VkDecoder::decode(void* buf, size_t bufsize, IOStream* stream,
     return mImpl->decode(buf, bufsize, stream, processResources, context);
 }
 
+std::map<uint32_t, uint64_t> VkDecoder::takeSnapshotReplayOpCounts() {
+    return mImpl->takeSnapshotReplayOpCounts();
+}
+
+
 // VkDecoder::Impl::decode to follow
 
 size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
@@ -125,6 +140,7 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
         const uint8_t* packet = (const uint8_t*)ptr;
         uint32_t opcode;
         std::memcpy(&opcode, ptr, sizeof(uint32_t));
+        if (m_forSnapshotLoad) ++m_replayOpCounts[opcode];
 
         uint32_t packetLen;
         std::memcpy(&packetLen, ptr + 4, sizeof(uint32_t));
