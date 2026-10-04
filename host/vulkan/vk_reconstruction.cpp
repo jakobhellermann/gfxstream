@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "vk_decoder.h"
+#include "vk_recording_order.h"
 #include "vulkan_boxed_handles.h"
 #include "gfxstream/containers/EntityManager.h"
 
@@ -115,6 +116,8 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     std::vector<uint64_t> subCmdBuffer;
     std::vector<uint8_t> subPacketBuffer;
     std::vector<uint8_t> subTraceBuffer;  // rewritten packets, main-stream format
+    std::map<uint64_t, std::vector<const VkSnapshotApiCallInfo*>> recordings;
+    std::vector<uint64_t> recordingOrder;
     for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
         // Drop entries for command buffers that no longer exist (freed, or
         // freed via vkResetCommandPool): replaying their packets would unbox
@@ -129,31 +132,70 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
         // dispatchable handle) saved together with its boxed command buffer;
         // the loader re-registers it so the next save keeps the content.
         subCmdBuffer.push_back(boxedCmd);
-        subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(),
-                               info->packet.end());
-        // Rewritten into main-stream format for the loader's replay: main
-        // stream packets carry a 4-byte seqno (QueueSubmitWithCommands) and
-        // the dispatchable VkCommandBuffer, both of which the sub-stream
-        // omits (the seqno lives in the decode loop, the handle in the flush
-        // call).
-        const uint32_t rewrittenLen = (uint32_t)info->packet.size() + 12;
-        const uint32_t seqno = 0;
-        const size_t base = subTraceBuffer.size();
-        subTraceBuffer.resize(base + rewrittenLen);
-        memcpy(subTraceBuffer.data() + base, info->packet.data(), 4);  // opcode
-        memcpy(subTraceBuffer.data() + base + 4, &rewrittenLen, 4);    // length
-        memcpy(subTraceBuffer.data() + base + 8, &seqno, 4);           // seqno
-        memcpy(subTraceBuffer.data() + base + 12, &boxedCmd, 8);       // VkCommandBuffer
-        memcpy(subTraceBuffer.data() + base + 20, info->packet.data() + 8,
-               info->packet.size() - 8);
-        subTraceBytes += rewrittenLen;
+        subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(), info->packet.end());
+        if (recordings[boxedCmd].empty()) recordingOrder.push_back(boxedCmd);
+        recordings[boxedCmd].push_back(info);
         subResolved++;
     }
+
+    // TODO(ai-review): generated, not yet audited
+    // vkCmdExecuteCommands records a reference to an executable secondary
+    // command buffer. The guest can record the primary first and later flush
+    // the secondary recording, so arrival order is not a valid replay order.
+    // Replay each buffer's packets in order, but finish its dependencies first.
+    std::map<uint64_t, std::vector<uint64_t>> dependencies;
+    for (uint64_t boxedCmd : recordingOrder) {
+        for (const auto* info : recordings[boxedCmd]) {
+            const auto& packet = info->packet;
+            uint32_t opcode;
+            memcpy(&opcode, packet.data(), sizeof(opcode));
+            if (opcode != OP_vkCmdExecuteCommands || packet.size() < 12) continue;
+            uint32_t count;
+            memcpy(&count, packet.data() + 8, sizeof(count));
+            if (count > (packet.size() - 12) / sizeof(uint64_t)) {
+                GFXSTREAM_WARNING("snapshot save: malformed vkCmdExecuteCommands in 0x%llx",
+                                  (unsigned long long)boxedCmd);
+                continue;
+            }
+            for (uint32_t i = 0; i < count; ++i) {
+                uint64_t secondary;
+                memcpy(&secondary, packet.data() + 12 + i * sizeof(secondary), sizeof(secondary));
+                if (recordings.count(secondary))
+                    dependencies[boxedCmd].push_back(secondary);
+                else
+                    GFXSTREAM_WARNING("snapshot save: secondary 0x%llx has no recording",
+                                      (unsigned long long)secondary);
+            }
+        }
+        dependencies.try_emplace(boxedCmd);
+    }
+    const auto replayOrder = orderCommandBufferRecordings(recordingOrder, dependencies);
+
+    for (uint64_t boxedCmd : replayOrder) {
+        for (const auto* info : recordings[boxedCmd]) {
+            // Rewritten into main-stream format for the loader's replay: main
+            // stream packets carry a 4-byte seqno (QueueSubmitWithCommands) and
+            // the dispatchable VkCommandBuffer, both of which the sub-stream
+            // omits (the seqno lives in the decode loop, the handle in the flush
+            // call).
+            const uint32_t rewrittenLen = (uint32_t)info->packet.size() + 12;
+            const uint32_t seqno = 0;
+            const size_t base = subTraceBuffer.size();
+            subTraceBuffer.resize(base + rewrittenLen);
+            memcpy(subTraceBuffer.data() + base, info->packet.data(), 4);  // opcode
+            memcpy(subTraceBuffer.data() + base + 4, &rewrittenLen, 4);    // length
+            memcpy(subTraceBuffer.data() + base + 8, &seqno, 4);           // seqno
+            memcpy(subTraceBuffer.data() + base + 12, &boxedCmd, 8);       // VkCommandBuffer
+            memcpy(subTraceBuffer.data() + base + 20, info->packet.data() + 8,
+                   info->packet.size() - 8);
+            subTraceBytes += rewrittenLen;
+        }
+    }
     apiTraceBuffer.resize(totalApiTraceSize + subTraceBytes);
-    memcpy(apiTraceBuffer.data() + totalApiTraceSize, subTraceBuffer.data(),
-           subTraceBuffer.size());
+    memcpy(apiTraceBuffer.data() + totalApiTraceSize, subTraceBuffer.data(), subTraceBuffer.size());
     GFXSTREAM_INFO(
-        "snapshot save: %zu graph api calls, %zu sub-decoded recording calls (%zu bytes, %zu resolved)",
+        "snapshot save: %zu graph api calls, %zu sub-decoded recording calls (%zu bytes, %zu "
+        "resolved)",
         uniqApiRefsByTopoOrder.size(), mSubDecodeApiCalls.size(), subTraceBytes, subResolved);
 
     gfxstream::host::saveBuffer(stream, createdHandleBuffer);
