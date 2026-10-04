@@ -420,6 +420,15 @@ void RingStream::unlockDma(uint64_t guest_paddr) {
     gfxstream::host::g_gfxstream_dma_unlock(guest_paddr);
 }
 
+bool RingStream::hasPendingGuestData() const {
+    if (ring_buffer_available_read(mContext.to_host, 0) > 0) {
+        return true;
+    }
+    return ring_buffer_available_read(
+               mContext.to_host_large_xfer.ring,
+               const_cast<struct ring_buffer_view*>(&mContext.to_host_large_xfer.view)) > 0;
+}
+
 int RingStream::writeFully(const void* buf, size_t len) {
     void* dstBuf = alloc(len);
     memcpy(dstBuf, buf, len);

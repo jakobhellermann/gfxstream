@@ -61,6 +61,14 @@ class RingStream final : public IOStream {
     void type3Read(uint32_t available, size_t* count, char** current, const char* ptrEnd);
 
     struct asg_context mContext;
+
+  public:
+    // True while the guest has commands queued that the consumer has not read
+    // yet (type1/xfer ring and large-xfer ring). Used by the snapshot pause to
+    // detect that the render thread has reached a packet boundary.
+    bool hasPendingGuestData() const;
+
+  protected:
     struct asg_ring_config mSavedRingConfig;
     ConsumerCallbacks mCallbacks;
 

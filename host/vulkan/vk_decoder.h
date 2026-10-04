@@ -30,6 +30,7 @@
 #pragma once
 #include <vulkan/vulkan.h>
 
+#include <map>
 #include <memory>
 
 #include "gfxstream/host/process_resources.h"
@@ -56,6 +57,10 @@ class VkDecoder {
     VkDecoder();
     ~VkDecoder();
     void setForSnapshotLoad(bool forSnapshotLoad);
+
+    /// Per-opcode histogram of a snapshot replay (filled while
+    /// setForSnapshotLoad(true) was active). Returns and clears.
+    std::map<uint32_t, uint64_t> takeSnapshotReplayOpCounts();
     size_t decode(void* buf, size_t bufsize, IOStream* stream,
                   const ProcessResources* processResources, const VkDecoderContext&);
 

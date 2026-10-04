@@ -53,6 +53,11 @@ class RenderThread : public gfxstream::base::Thread {
     void waitForFinished();
 
     void pausePreSnapshot();
+
+    // Bounded wait until no decode is in flight and the command ring is
+    // drained. See pausePreSnapshot() for why the snapshot pause must not
+    // fire earlier.
+    void waitForDecodeIdle();
     void resume();
     void save(gfxstream::Stream* stream);
 
@@ -106,6 +111,11 @@ class RenderThread : public gfxstream::base::Thread {
     SnapshotState mState = SnapshotState::Empty;
     std::atomic<bool> mFinished { false };
     std::atomic_bool mDecodersShouldStop{false};
+    // True while the decode loop is inside a decoder call. Decodes can block
+    // for a long time (e.g. a submit waiting on a semaphore whose signal path
+    // runs elsewhere in the host), and the snapshot pause must not fire while
+    // one is in flight. See RenderThread::pausePreSnapshot().
+    std::atomic_bool mDecoding{false};
     gfxstream::base::Lock mLock;
     gfxstream::base::ConditionVariable mSnapshotSignal;
     gfxstream::base::ConditionVariable mFinishedSignal;

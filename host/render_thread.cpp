@@ -114,7 +114,41 @@ RenderThread::RenderThread(const AsgConsumerCreateInfo& info, Stream* load)
 // the end of RenderThread::main().
 RenderThread::~RenderThread() = default;
 
+// Poll until no decode is in flight and the command ring has no pending
+// guest data. Bounded: on timeout we log loudly and pause anyway (the old,
+// deadlock-prone behavior) so the failure is observable instead of silent.
+void RenderThread::waitForDecodeIdle() {
+    const int kMaxWaitMs = 10000;
+    for (int waitedMs = 0; waitedMs < kMaxWaitMs; waitedMs += 5) {
+        bool busy = mDecoding.load(std::memory_order_relaxed);
+        if (!busy && mRingStream) {
+            busy = mRingStream->hasPendingGuestData();
+        }
+        if (!busy) {
+            return;
+        }
+        usleep(5000);
+    }
+    GFXSTREAM_ERROR(
+        "RenderThread %p: decode still in flight after %d ms before snapshot "
+        "pause. Is the guest actually suspended? Proceeding with the pause; "
+        "expect the snapshot to deadlock on waitForSnapshotCompletion.",
+        (void*)this, kMaxWaitMs);
+}
+
 void RenderThread::pausePreSnapshot() {
+    // Reaching a packet boundary here is not automatic: an in-flight decode
+    // can block on guest-owned sync state (e.g. a vkQueueSubmit waiting on a
+    // semaphore whose signal comes from the display/repost pipeline). Freezing
+    // the pipeline while such a decode is running deadlocks the snapshot: the
+    // decode never returns, RenderThread::save waits forever.
+    //
+    // So wait until the thread is idle (no decode in flight, command ring
+    // drained) BEFORE freezing anything. This requires the guest to have
+    // stopped issuing commands (the VMM / valo contract: guest frozen before
+    // the snapshot is requested) — otherwise the ring refills forever.
+    waitForDecodeIdle();
+
     AutoLock lock(mLock);
     assert(mState == SnapshotState::Empty);
     mStream.emplace();
@@ -449,8 +483,10 @@ intptr_t RenderThread::main() {
                     .gfxApiLogger = &gfxLogger,
                     .shouldExit = &mDecodersShouldStop,
                 };
+                mDecoding.store(true, std::memory_order_relaxed);
                 last = tInfo->m_vkInfo->m_vkDec.decode(readBuf.buf(), readBuf.validData(), ioStream,
                                                       processResources, context);
+                mDecoding.store(false, std::memory_order_relaxed);
                 if (last > 0) {
                     if (!processResources) {
                         GFXSTREAM_ERROR(
@@ -488,8 +524,10 @@ intptr_t RenderThread::main() {
 #if GFXSTREAM_ENABLE_HOST_GLES
             if (tInfo->m_glInfo) {
                 {
+                    mDecoding.store(true, std::memory_order_relaxed);
                     last = tInfo->m_glInfo->m_glDec.decode(
                             readBuf.buf(), readBuf.validData(), ioStream, &checksumCalc);
+                    mDecoding.store(false, std::memory_order_relaxed);
                     if (last > 0) {
                         progress = true;
                         readBuf.consume(last);
@@ -501,8 +539,10 @@ intptr_t RenderThread::main() {
                 // decoder
                 //
                 {
+                    mDecoding.store(true, std::memory_order_relaxed);
                     last = tInfo->m_glInfo->m_gl2Dec.decode(readBuf.buf(), readBuf.validData(),
                                                            ioStream, &checksumCalc);
+                    mDecoding.store(false, std::memory_order_relaxed);
 
                     if (last > 0) {
                         progress = true;
