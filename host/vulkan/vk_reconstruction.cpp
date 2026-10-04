@@ -118,11 +118,31 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     std::vector<uint8_t> subTraceBuffer;  // rewritten packets, main-stream format
     std::map<uint64_t, std::vector<const VkSnapshotApiCallInfo*>> recordings;
     std::vector<uint64_t> recordingOrder;
+    // TODO(ai-review): generated, not yet audited
+    // Destroying a referenced Vulkan object invalidates a recorded command
+    // buffer even when the command buffer itself remains allocated. The
+    // snapshot layer already recorded each packet's object dependencies.
+    std::set<uint64_t> invalidRecordings;
+    for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
+        const auto* info = mApiCallManager.get(apiHandle);
+        if (!info) continue;
+        for (uint64_t dependency : info->depends) {
+            if (dependency && !mGraph.getDepNode(dependency)) {
+                if (invalidRecordings.insert(boxedCmd).second) {
+                    GFXSTREAM_WARNING(
+                        "snapshot save: skip command buffer 0x%llx with destroyed dependency "
+                        "0x%llx",
+                        (unsigned long long)boxedCmd, (unsigned long long)dependency);
+                }
+                break;
+            }
+        }
+    }
     for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
         // Drop entries for command buffers that no longer exist (freed, or
         // freed via vkResetCommandPool): replaying their packets would unbox
         // dead handles and abort the restore.
-        if (!mGraph.getDepNode(boxedCmd)) continue;
+        if (!mGraph.getDepNode(boxedCmd) || invalidRecordings.count(boxedCmd)) continue;
         const VkSnapshotApiCallInfo* info = mApiCallManager.get(apiHandle);
         if (!info || info->packet.size() < 8 ||
             *(const uint32_t*)(info->packet.data() + 4) != info->packet.size()) {
