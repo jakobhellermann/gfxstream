@@ -77,6 +77,11 @@ class VkDecoderSnapshot::Impl {
         mReconstruction.addSubDecodeApiCall(handle, boxedDispatchHandle);
     }
 
+    void discardSubDecodeCallsForCmdBuffer(uint64_t boxedCmd) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        mReconstruction.discardSubDecodeCallsForCmdBuffer(boxedCmd);
+    }
+
     // TODO(ai-review): generated, not yet audited
     // Explicitly store the raw packet for a sub-decoded api call; most vkCmd*
     // snapshot handlers don't call setApiTrace themselves.
@@ -2990,6 +2995,10 @@ void VkDecoderSnapshot::destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle handl
 void VkDecoderSnapshot::addSubDecodeApiCall(VkSnapshotApiCallHandle handle,
                                             uint64_t boxedDispatchHandle) {
     mImpl->addSubDecodeApiCall(handle, boxedDispatchHandle);
+}
+
+void VkDecoderSnapshot::discardSubDecodeCallsForCmdBuffer(uint64_t boxedCmd) {
+    mImpl->discardSubDecodeCallsForCmdBuffer(boxedCmd);
 }
 
 void VkDecoderSnapshot::setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet,

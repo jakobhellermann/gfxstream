@@ -72,6 +72,7 @@ class VkDecoderSnapshot {
     // Register a sub-decoded (command buffer recording) api call so its
     // packet reaches saveReplayBuffers; see VkReconstruction::addSubDecodeApiCall.
     void addSubDecodeApiCall(VkSnapshotApiCallHandle handle, uint64_t boxedDispatchHandle);
+    void discardSubDecodeCallsForCmdBuffer(uint64_t boxedCmd);
 
     // TODO(ai-review): generated, not yet audited
     // Explicitly store the raw packet for a sub-decoded api call: most vkCmd*
