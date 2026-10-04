@@ -908,8 +908,24 @@ class VkDecoderGlobalState::Impl {
             std::vector<uint8_t> decoderReplayBuffer;
             std::vector<uint64_t> subCmdBuffer;
             std::vector<uint8_t> subPacketBuffer;
+            std::vector<uint32_t> subDependencyCounts;
+            std::vector<uint64_t> subDependencies;
             VkDecoderSnapshot::loadReplayBuffers(stream, &handleReplayBuffer, &decoderReplayBuffer,
-                                                 &subCmdBuffer, &subPacketBuffer);
+                                                 &subCmdBuffer, &subPacketBuffer,
+                                                 &subDependencyCounts, &subDependencies);
+            size_t dependencyTotal = 0;
+            for (uint32_t count : subDependencyCounts) {
+                if (count > subDependencies.size() - dependencyTotal) {
+                    GFXSTREAM_ERROR("snapshot load: invalid recording dependency counts");
+                    return false;
+                }
+                dependencyTotal += count;
+            }
+            if (subDependencyCounts.size() != subCmdBuffer.size() ||
+                dependencyTotal != subDependencies.size()) {
+                GFXSTREAM_ERROR("snapshot load: recording dependency data is inconsistent");
+                return false;
+            }
 
             sBoxedHandleManager.replayHandles(handleReplayBuffer);
 
@@ -968,15 +984,22 @@ class VkDecoderGlobalState::Impl {
                 {
                     std::lock_guard<std::mutex> lock(mMutex);
                     size_t pos = 0;
+                    size_t dependencyPos = 0;
                     size_t registered = 0;
-                    for (size_t i = 0;
-                         i < subCmdBuffer.size() && pos + 8 <= subPacketBuffer.size(); ++i) {
+                    for (size_t i = 0; i < subCmdBuffer.size() && pos + 8 <= subPacketBuffer.size();
+                         ++i) {
                         const uint32_t packetLen =
                             *(const uint32_t*)(subPacketBuffer.data() + pos + 4);
                         if (packetLen < 8 || pos + packetLen > subPacketBuffer.size()) break;
                         VkSnapshotApiCallHandle h = snapshot()->createApiCallInfo();
                         snapshot()->addSubDecodeApiCall(h, subCmdBuffer[i]);
                         snapshot()->setApiTrace(h, subPacketBuffer.data() + pos, packetLen);
+                        snapshot()->setApiDependencies(h,
+                                                       subDependencyCounts[i]
+                                                           ? subDependencies.data() + dependencyPos
+                                                           : nullptr,
+                                                       subDependencyCounts[i]);
+                        dependencyPos += subDependencyCounts[i];
                         registered++;
                         pos += packetLen;
                     }

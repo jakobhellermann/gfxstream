@@ -115,6 +115,8 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     size_t subResolved = 0;
     std::vector<uint64_t> subCmdBuffer;
     std::vector<uint8_t> subPacketBuffer;
+    std::vector<uint32_t> subDependencyCounts;
+    std::vector<uint64_t> subDependencies;
     std::vector<uint8_t> subTraceBuffer;  // rewritten packets, main-stream format
     std::map<uint64_t, std::vector<const VkSnapshotApiCallInfo*>> recordings;
     std::vector<uint64_t> recordingOrder;
@@ -153,6 +155,8 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
         // the loader re-registers it so the next save keeps the content.
         subCmdBuffer.push_back(boxedCmd);
         subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(), info->packet.end());
+        subDependencyCounts.push_back((uint32_t)info->depends.size());
+        subDependencies.insert(subDependencies.end(), info->depends.begin(), info->depends.end());
         if (recordings[boxedCmd].empty()) recordingOrder.push_back(boxedCmd);
         recordings[boxedCmd].push_back(info);
         subResolved++;
@@ -222,6 +226,8 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     gfxstream::host::saveBuffer(stream, apiTraceBuffer);
     gfxstream::host::saveBuffer(stream, subCmdBuffer);
     gfxstream::host::saveBuffer(stream, subPacketBuffer);
+    gfxstream::host::saveBuffer(stream, subDependencyCounts);
+    gfxstream::host::saveBuffer(stream, subDependencies);
 }
 
 /*static*/
@@ -229,13 +235,17 @@ void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
                                          std::vector<uint64_t>* outHandleBuffer,
                                          std::vector<uint8_t>* outDecoderBuffer,
                                          std::vector<uint64_t>* outSubCmdBuffer,
-                                         std::vector<uint8_t>* outSubPacketBuffer) {
+                                         std::vector<uint8_t>* outSubPacketBuffer,
+                                         std::vector<uint32_t>* outSubDependencyCounts,
+                                         std::vector<uint64_t>* outSubDependencies) {
     DEBUG_RECON("starting to unpack decoder replay buffer");
 
     gfxstream::host::loadBuffer(stream, outHandleBuffer);
     gfxstream::host::loadBuffer(stream, outDecoderBuffer);
     gfxstream::host::loadBuffer(stream, outSubCmdBuffer);
     gfxstream::host::loadBuffer(stream, outSubPacketBuffer);
+    gfxstream::host::loadBuffer(stream, outSubDependencyCounts);
+    gfxstream::host::loadBuffer(stream, outSubDependencies);
 
     DEBUG_RECON("finished unpacking decoder replay buffer");
 }
@@ -262,8 +272,7 @@ void VkReconstruction::destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle handle
     }
 
     if (!info->extraCreatedHandles.empty()) {
-        info->createdHandles.insert(info->createdHandles.end(),
-                                    info->extraCreatedHandles.begin(),
+        info->createdHandles.insert(info->createdHandles.end(), info->extraCreatedHandles.begin(),
                                     info->extraCreatedHandles.end());
         info->extraCreatedHandles.clear();
     }
@@ -274,6 +283,17 @@ void VkReconstruction::setApiTrace(VkSnapshotApiCallHandle apiCallHandle, const 
     VkSnapshotApiCallInfo* info = mApiCallManager.get(apiCallHandle);
     if (info && packet && packetLenBytes > 0) {
         info->packet.assign(packet, packet + packetLenBytes);
+    }
+}
+
+void VkReconstruction::setApiDependencies(VkSnapshotApiCallHandle apiCallHandle,
+                                          const uint64_t* dependencies, size_t count) {
+    VkSnapshotApiCallInfo* info = mApiCallManager.get(apiCallHandle);
+    if (!info) return;
+    if (count == 0) {
+        info->depends.clear();
+    } else {
+        info->depends.assign(dependencies, dependencies + count);
     }
 }
 

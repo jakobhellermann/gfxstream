@@ -59,9 +59,12 @@ class VkDecoderSnapshot::Impl {
     static void loadReplayBuffers(gfxstream::Stream* stream, std::vector<uint64_t>* outHandleBuffer,
                                   std::vector<uint8_t>* outDecoderBuffer,
                                   std::vector<uint64_t>* outSubCmdBuffer,
-                                  std::vector<uint8_t>* outSubPacketBuffer) {
+                                  std::vector<uint8_t>* outSubPacketBuffer,
+                                  std::vector<uint32_t>* outSubDependencyCounts,
+                                  std::vector<uint64_t>* outSubDependencies) {
         VkReconstruction::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
-                                            outSubCmdBuffer, outSubPacketBuffer);
+                                            outSubCmdBuffer, outSubPacketBuffer,
+                                            outSubDependencyCounts, outSubDependencies);
     }
 
     VkSnapshotApiCallHandle createApiCallInfo() {
@@ -85,10 +88,15 @@ class VkDecoderSnapshot::Impl {
     // TODO(ai-review): generated, not yet audited
     // Explicitly store the raw packet for a sub-decoded api call; most vkCmd*
     // snapshot handlers don't call setApiTrace themselves.
-    void setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet,
-                     size_t packetLenBytes) {
+    void setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet, size_t packetLenBytes) {
         std::lock_guard<std::mutex> lock(mReconstructionMutex);
         mReconstruction.setApiTrace(handle, packet, packetLenBytes);
+    }
+
+    void setApiDependencies(VkSnapshotApiCallHandle handle, const uint64_t* dependencies,
+                            size_t count) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        mReconstruction.setApiDependencies(handle, dependencies, count);
     }
 
     void destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle apiCallHandle) {
@@ -616,6 +624,7 @@ class VkDecoderSnapshot::Impl {
                               VkCommandBuffer commandBuffer,
                               const VkCommandBufferBeginInfo* pBeginInfo) {
         std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        recordCommandBufferInheritanceDependencies(apiCallHandle, pBeginInfo);
         // commandBuffer modify
         mReconstruction.setApiTrace(apiCallHandle, apiCallPacket, apiCallPacketSize);
         for (uint32_t i = 0; i < 1; ++i) {
@@ -2782,7 +2791,28 @@ class VkDecoderSnapshot::Impl {
                                          VkSnapshotApiCallHandle apiCallHandle,
                                          const uint8_t* apiCallPacket, size_t apiCallPacketSize,
                                          VkCommandBuffer commandBuffer,
-                                         const VkCommandBufferBeginInfo* pBeginInfo) {}
+                                         const VkCommandBufferBeginInfo* pBeginInfo) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        recordCommandBufferInheritanceDependencies(apiCallHandle, pBeginInfo);
+    }
+    // TODO(ai-review): generated, not yet audited
+    // The Begin packet itself is retained by the sub-decoder. Its inheritance
+    // handles still need to enter the live-object filter used at save time.
+    void recordCommandBufferInheritanceDependencies(VkSnapshotApiCallHandle apiCallHandle,
+                                                    const VkCommandBufferBeginInfo* pBeginInfo) {
+        if (!pBeginInfo || !pBeginInfo->pInheritanceInfo) return;
+        const auto& inheritance = *pBeginInfo->pInheritanceInfo;
+        if (inheritance.renderPass) {
+            mReconstruction.addApiCallDependencyOnVkObject(
+                apiCallHandle, (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkRenderPass(
+                                   inheritance.renderPass));
+        }
+        if (inheritance.framebuffer) {
+            mReconstruction.addApiCallDependencyOnVkObject(
+                apiCallHandle, (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkFramebuffer(
+                                   inheritance.framebuffer));
+        }
+    }
     void vkEndCommandBufferAsyncGOOGLE(gfxstream::base::BumpPool* pool,
                                        VkSnapshotApiCallHandle apiCallHandle,
                                        const uint8_t* apiCallPacket, size_t apiCallPacketSize,
@@ -2979,9 +3009,12 @@ void VkDecoderSnapshot::loadReplayBuffers(gfxstream::Stream* stream,
                                           std::vector<uint64_t>* outHandleBuffer,
                                           std::vector<uint8_t>* outDecoderBuffer,
                                           std::vector<uint64_t>* outSubCmdBuffer,
-                                          std::vector<uint8_t>* outSubPacketBuffer) {
+                                          std::vector<uint8_t>* outSubPacketBuffer,
+                                          std::vector<uint32_t>* outSubDependencyCounts,
+                                          std::vector<uint64_t>* outSubDependencies) {
     VkDecoderSnapshot::Impl::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
-                                               outSubCmdBuffer, outSubPacketBuffer);
+                                               outSubCmdBuffer, outSubPacketBuffer,
+                                               outSubDependencyCounts, outSubDependencies);
 }
 
 VkSnapshotApiCallHandle VkDecoderSnapshot::createApiCallInfo() {
@@ -3004,6 +3037,11 @@ void VkDecoderSnapshot::discardSubDecodeCallsForCmdBuffer(uint64_t boxedCmd) {
 void VkDecoderSnapshot::setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet,
                                     size_t packetLenBytes) {
     mImpl->setApiTrace(handle, packet, packetLenBytes);
+}
+
+void VkDecoderSnapshot::setApiDependencies(VkSnapshotApiCallHandle handle,
+                                           const uint64_t* dependencies, size_t count) {
+    mImpl->setApiDependencies(handle, dependencies, count);
 }
 
 void VkDecoderSnapshot::addOrderedBoxedHandlesCreatedByCall(VkSnapshotApiCallHandle apiCallHandle,
