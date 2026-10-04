@@ -42,7 +42,9 @@ class VkReconstruction {
     void saveReplayBuffers(gfxstream::Stream* stream);
     static void loadReplayBuffers(gfxstream::Stream* stream,
                                   std::vector<uint64_t>* outHandleBuffer,
-                                  std::vector<uint8_t>* outDecoderBuffer);
+                                  std::vector<uint8_t>* outDecoderBuffer,
+                                  std::vector<uint64_t>* outSubCmdBuffer,
+                                  std::vector<uint8_t>* outSubPacketBuffer);
 
     enum HandleState { CREATED = 0 };
 
@@ -102,6 +104,26 @@ class VkReconstruction {
                                              const VkObjectHandle* boxedHandles,
                                              uint32_t boxedHandlesCount);
 
+    // TODO(ai-review): generated, not yet audited
+    // Sub-decoded calls (command buffer recording: Begin/End/vkCmd*, arriving
+    // via vkQueueFlushCommandsGOOGLE) never create handles, so they have no
+    // DependencyGraph node and would never reach saveReplayBuffers' topo walk
+    // (upstream's forEachHandleAddModifyApi is an unimplemented stub). Keep
+    // them in an ordered list and append their packets to the replay stream
+    // after the graph-derived packets.
+    //
+    // Sub-stream packets omit the dispatchable VkCommandBuffer argument (it is
+    // implied by the flush call), while the loader replays packets through the
+    // main decoder, which reads it as the first argument. Store the boxed
+    // command buffer per call and insert it at save time.
+    void addSubDecodeApiCall(VkSnapshotApiCallHandle apiCallHandle, uint64_t boxedDispatchHandle) {
+        // Caller (the sub-decoder) creates the api info right before, so a
+        // duplicate entry would only arise from a miswired call site.
+        if (mApiCallManager.get(apiCallHandle)) {
+            mSubDecodeApiCalls.push_back({apiCallHandle, boxedDispatchHandle});
+        }
+    }
+
    private:
     struct VkSnapshotApiCallInfo {
         VkSnapshotApiCallHandle handle = kInvalidSnapshotApiCallHandle;
@@ -129,6 +151,11 @@ class VkReconstruction {
 
     using VkSnapshotApiCallManager = gfxstream::base::EntityManager<32, 16, 16, VkSnapshotApiCallInfo>;
     VkSnapshotApiCallManager mApiCallManager;
+
+    // Ordered list of sub-decoded (command buffer recording) api calls; see
+    // addSubDecodeApiCall. Serialized after the graph-derived replay packets,
+    // rewritten into main-stream format (dispatchable handle inserted).
+    std::vector<std::pair<VkSnapshotApiCallHandle, uint64_t>> mSubDecodeApiCalls;
 
     std::vector<uint8_t> mLoadedTrace;
 

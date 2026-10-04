@@ -57,13 +57,33 @@ class VkDecoderSnapshot::Impl {
     }
 
     static void loadReplayBuffers(gfxstream::Stream* stream, std::vector<uint64_t>* outHandleBuffer,
-                                  std::vector<uint8_t>* outDecoderBuffer) {
-        VkReconstruction::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer);
+                                  std::vector<uint8_t>* outDecoderBuffer,
+                                  std::vector<uint64_t>* outSubCmdBuffer,
+                                  std::vector<uint8_t>* outSubPacketBuffer) {
+        VkReconstruction::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
+                                            outSubCmdBuffer, outSubPacketBuffer);
     }
 
     VkSnapshotApiCallHandle createApiCallInfo() {
         std::lock_guard<std::mutex> lock(mReconstructionMutex);
         return mReconstruction.createApiCallInfo();
+    }
+
+    // TODO(ai-review): generated, not yet audited
+    // Register a sub-decoded (command buffer recording) api call so its
+    // packet reaches saveReplayBuffers.
+    void addSubDecodeApiCall(VkSnapshotApiCallHandle handle, uint64_t boxedDispatchHandle) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        mReconstruction.addSubDecodeApiCall(handle, boxedDispatchHandle);
+    }
+
+    // TODO(ai-review): generated, not yet audited
+    // Explicitly store the raw packet for a sub-decoded api call; most vkCmd*
+    // snapshot handlers don't call setApiTrace themselves.
+    void setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet,
+                     size_t packetLenBytes) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        mReconstruction.setApiTrace(handle, packet, packetLenBytes);
     }
 
     void destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle apiCallHandle) {
@@ -2952,8 +2972,11 @@ void VkDecoderSnapshot::saveReplayBuffers(gfxstream::Stream* stream) {
 /*static*/
 void VkDecoderSnapshot::loadReplayBuffers(gfxstream::Stream* stream,
                                           std::vector<uint64_t>* outHandleBuffer,
-                                          std::vector<uint8_t>* outDecoderBuffer) {
-    VkDecoderSnapshot::Impl::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer);
+                                          std::vector<uint8_t>* outDecoderBuffer,
+                                          std::vector<uint64_t>* outSubCmdBuffer,
+                                          std::vector<uint8_t>* outSubPacketBuffer) {
+    VkDecoderSnapshot::Impl::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
+                                               outSubCmdBuffer, outSubPacketBuffer);
 }
 
 VkSnapshotApiCallHandle VkDecoderSnapshot::createApiCallInfo() {
@@ -2962,6 +2985,16 @@ VkSnapshotApiCallHandle VkDecoderSnapshot::createApiCallInfo() {
 
 void VkDecoderSnapshot::destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle handle) {
     mImpl->destroyApiCallInfoIfUnused(handle);
+}
+
+void VkDecoderSnapshot::addSubDecodeApiCall(VkSnapshotApiCallHandle handle,
+                                            uint64_t boxedDispatchHandle) {
+    mImpl->addSubDecodeApiCall(handle, boxedDispatchHandle);
+}
+
+void VkDecoderSnapshot::setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet,
+                                    size_t packetLenBytes) {
+    mImpl->setApiTrace(handle, packet, packetLenBytes);
 }
 
 void VkDecoderSnapshot::addOrderedBoxedHandlesCreatedByCall(VkSnapshotApiCallHandle apiCallHandle,

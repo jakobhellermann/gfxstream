@@ -54,6 +54,7 @@ VkReconstruction::VkReconstruction() = default;
 void VkReconstruction::clear() {
     mGraph.clear();
     mApiCallManager.clear();
+    mSubDecodeApiCalls.clear();
 }
 
 void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
@@ -103,18 +104,73 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     DEBUG_RECON("created handle buffer size: %zu trace: %zu", createdHandleBuffer.size(),
                 apiTraceBuffer.size());
 
+    // TODO(ai-review): generated, not yet audited
+    // Append sub-decoded (command buffer recording) api packets after the
+    // graph-derived stream. These calls create no handles, so appending does
+    // not disturb the created-handle pairing the loader derives from the
+    // create-calls; the loader's linear decode just re-applies the recording
+    // after all objects exist.
+    size_t subTraceBytes = 0;
+    size_t subResolved = 0;
+    std::vector<uint64_t> subCmdBuffer;
+    std::vector<uint8_t> subPacketBuffer;
+    for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
+        if (const VkSnapshotApiCallInfo* info = mApiCallManager.get(apiHandle)) {
+            // Save the raw sub-stream packet (blob format: [op][len][args],
+            // no seqno, no dispatchable handle) together with its boxed
+            // command buffer. The loader re-applies the rewritten packet via
+            // the main decoder replay (appended to apiTraceBuffer below) and
+            // re-registers the raw packet so the next save keeps the content
+            // (restored state must stay snapshot-safe).
+            if (info->packet.size() >= 8 &&
+                *(const uint32_t*)(info->packet.data() + 4) == info->packet.size()) {
+                subCmdBuffer.push_back(boxedCmd);
+                subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(),
+                                       info->packet.end());
+                subTraceBytes += info->packet.size() + 12;
+                subResolved++;
+            }
+        }
+    }
+    apiTraceBuffer.resize(totalApiTraceSize + subTraceBytes);
+    uint8_t* subTracePtr = apiTraceBuffer.data() + totalApiTraceSize;
+    for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
+        const VkSnapshotApiCallInfo* info = mApiCallManager.get(apiHandle);
+        if (!info || info->packet.size() < 8 ||
+            *(const uint32_t*)(info->packet.data() + 4) != info->packet.size()) {
+            continue;
+        }
+        const uint32_t rewrittenLen = (uint32_t)info->packet.size() + 12;
+        const uint32_t seqno = 0;
+        memcpy(subTracePtr, info->packet.data(), 4);                          // opcode
+        memcpy(subTracePtr + 4, &rewrittenLen, 4);                            // length
+        memcpy(subTracePtr + 8, &seqno, 4);                                   // QueueSubmitWithCommands seqno
+        memcpy(subTracePtr + 12, &boxedCmd, 8);                               // VkCommandBuffer
+        memcpy(subTracePtr + 20, info->packet.data() + 8, info->packet.size() - 8);
+        subTracePtr += rewrittenLen;
+    }
+    GFXSTREAM_INFO(
+        "snapshot save: %zu graph api calls, %zu sub-decoded recording calls (%zu bytes, %zu resolved)",
+        uniqApiRefsByTopoOrder.size(), mSubDecodeApiCalls.size(), subTraceBytes, subResolved);
+
     gfxstream::host::saveBuffer(stream, createdHandleBuffer);
     gfxstream::host::saveBuffer(stream, apiTraceBuffer);
+    gfxstream::host::saveBuffer(stream, subCmdBuffer);
+    gfxstream::host::saveBuffer(stream, subPacketBuffer);
 }
 
 /*static*/
 void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
                                          std::vector<uint64_t>* outHandleBuffer,
-                                         std::vector<uint8_t>* outDecoderBuffer) {
+                                         std::vector<uint8_t>* outDecoderBuffer,
+                                         std::vector<uint64_t>* outSubCmdBuffer,
+                                         std::vector<uint8_t>* outSubPacketBuffer) {
     DEBUG_RECON("starting to unpack decoder replay buffer");
 
     gfxstream::host::loadBuffer(stream, outHandleBuffer);
     gfxstream::host::loadBuffer(stream, outDecoderBuffer);
+    gfxstream::host::loadBuffer(stream, outSubCmdBuffer);
+    gfxstream::host::loadBuffer(stream, outSubPacketBuffer);
 
     DEBUG_RECON("finished unpacking decoder replay buffer");
 }
