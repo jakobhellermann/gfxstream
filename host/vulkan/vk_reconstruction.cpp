@@ -114,41 +114,44 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     size_t subResolved = 0;
     std::vector<uint64_t> subCmdBuffer;
     std::vector<uint8_t> subPacketBuffer;
+    std::vector<uint8_t> subTraceBuffer;  // rewritten packets, main-stream format
     for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
-        if (const VkSnapshotApiCallInfo* info = mApiCallManager.get(apiHandle)) {
-            // Save the raw sub-stream packet (blob format: [op][len][args],
-            // no seqno, no dispatchable handle) together with its boxed
-            // command buffer. The loader re-applies the rewritten packet via
-            // the main decoder replay (appended to apiTraceBuffer below) and
-            // re-registers the raw packet so the next save keeps the content
-            // (restored state must stay snapshot-safe).
-            if (info->packet.size() >= 8 &&
-                *(const uint32_t*)(info->packet.data() + 4) == info->packet.size()) {
-                subCmdBuffer.push_back(boxedCmd);
-                subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(),
-                                       info->packet.end());
-                subTraceBytes += info->packet.size() + 12;
-                subResolved++;
-            }
-        }
-    }
-    apiTraceBuffer.resize(totalApiTraceSize + subTraceBytes);
-    uint8_t* subTracePtr = apiTraceBuffer.data() + totalApiTraceSize;
-    for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
+        // Drop entries for command buffers that no longer exist (freed, or
+        // freed via vkResetCommandPool): replaying their packets would unbox
+        // dead handles and abort the restore.
+        if (!mGraph.getDepNode(boxedCmd)) continue;
         const VkSnapshotApiCallInfo* info = mApiCallManager.get(apiHandle);
         if (!info || info->packet.size() < 8 ||
             *(const uint32_t*)(info->packet.data() + 4) != info->packet.size()) {
             continue;
         }
+        // Raw sub-stream packet (blob format: [op][len][args], no seqno, no
+        // dispatchable handle) saved together with its boxed command buffer;
+        // the loader re-registers it so the next save keeps the content.
+        subCmdBuffer.push_back(boxedCmd);
+        subPacketBuffer.insert(subPacketBuffer.end(), info->packet.begin(),
+                               info->packet.end());
+        // Rewritten into main-stream format for the loader's replay: main
+        // stream packets carry a 4-byte seqno (QueueSubmitWithCommands) and
+        // the dispatchable VkCommandBuffer, both of which the sub-stream
+        // omits (the seqno lives in the decode loop, the handle in the flush
+        // call).
         const uint32_t rewrittenLen = (uint32_t)info->packet.size() + 12;
         const uint32_t seqno = 0;
-        memcpy(subTracePtr, info->packet.data(), 4);                          // opcode
-        memcpy(subTracePtr + 4, &rewrittenLen, 4);                            // length
-        memcpy(subTracePtr + 8, &seqno, 4);                                   // QueueSubmitWithCommands seqno
-        memcpy(subTracePtr + 12, &boxedCmd, 8);                               // VkCommandBuffer
-        memcpy(subTracePtr + 20, info->packet.data() + 8, info->packet.size() - 8);
-        subTracePtr += rewrittenLen;
+        const size_t base = subTraceBuffer.size();
+        subTraceBuffer.resize(base + rewrittenLen);
+        memcpy(subTraceBuffer.data() + base, info->packet.data(), 4);  // opcode
+        memcpy(subTraceBuffer.data() + base + 4, &rewrittenLen, 4);    // length
+        memcpy(subTraceBuffer.data() + base + 8, &seqno, 4);           // seqno
+        memcpy(subTraceBuffer.data() + base + 12, &boxedCmd, 8);       // VkCommandBuffer
+        memcpy(subTraceBuffer.data() + base + 20, info->packet.data() + 8,
+               info->packet.size() - 8);
+        subTraceBytes += rewrittenLen;
+        subResolved++;
     }
+    apiTraceBuffer.resize(totalApiTraceSize + subTraceBytes);
+    memcpy(apiTraceBuffer.data() + totalApiTraceSize, subTraceBuffer.data(),
+           subTraceBuffer.size());
     GFXSTREAM_INFO(
         "snapshot save: %zu graph api calls, %zu sub-decoded recording calls (%zu bytes, %zu resolved)",
         uniqApiRefsByTopoOrder.size(), mSubDecodeApiCalls.size(), subTraceBytes, subResolved);

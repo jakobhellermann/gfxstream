@@ -151,6 +151,13 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
             GFXSTREAM_WARNING("Bad packet length %d detected, decode may fail", packetLen);
         }
 
+        if (m_forSnapshotLoad) {
+            // Per-packet trace of the snapshot replay, for debugging replay
+            // buffer layout issues. Debug level: too verbose for info.
+            GFXSTREAM_DEBUG("[diag] replay packet: offset=%zu op=%s(%u) len=%u",
+                            (size_t)(ptr - (unsigned char*)buf), api_opcode_to_string(opcode),
+                            opcode, packetLen);
+        }
         if (end - ptr < packetLen) return ptr - (unsigned char*)buf;
         gfx_logger.record(ptr, std::min(size_t(packetLen + 8), size_t(end - ptr)));
         stream()->setStream(ioStream);
