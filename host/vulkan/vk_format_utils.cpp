@@ -439,6 +439,30 @@ const FormatPlaneLayouts* getFormatPlaneLayouts(VkFormat format) {
 }
 
 bool getFormatTransferInfo(VkFormat format, VkExtent3D extent, TransferInfo* outTransferInfo) {
+    if (format == VK_FORMAT_BC3_UNORM_BLOCK || format == VK_FORMAT_BC7_UNORM_BLOCK) {
+        // Both formats store a 4x4 texel block in 16 bytes. A zero row length and image
+        // height request tightly packed blocks while imageExtent remains in texels.
+        const VkDeviceSize blocksWide = (static_cast<VkDeviceSize>(extent.width) + 3) / 4;
+        const VkDeviceSize blocksHigh = (static_cast<VkDeviceSize>(extent.height) + 3) / 4;
+        outTransferInfo->stagingBufferCopySize = blocksWide * blocksHigh * extent.depth * 16;
+        outTransferInfo->bufferImageCopies = {VkBufferImageCopy{
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource = {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .imageOffset = {0, 0, 0},
+            .imageExtent = extent,
+        }};
+        outTransferInfo->packFunction = nullptr;
+        outTransferInfo->unpackFunction = nullptr;
+        return true;
+    }
+
     const FormatPlaneLayouts* formatInfo = getFormatPlaneLayouts(format);
     if (formatInfo == nullptr) {
         GFXSTREAM_ERROR("Unhandled format: %s [%d]", string_VkFormat(format), format);
