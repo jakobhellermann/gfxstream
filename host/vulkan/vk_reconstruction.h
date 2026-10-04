@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <map>
 #include <memory>
@@ -122,6 +123,20 @@ class VkReconstruction {
         if (mApiCallManager.get(apiCallHandle)) {
             mSubDecodeApiCalls.push_back({apiCallHandle, boxedDispatchHandle});
         }
+    }
+
+    // TODO(ai-review): generated, not yet audited
+    // vkBeginCommandBuffer/vkResetCommandBuffer discard the buffer's previous
+    // content, so any earlier recording packets for this command buffer are
+    // stale (they may reference handles that were destroyed since — replaying
+    // them would unbox dead handles and abort the restore).
+    void discardSubDecodeCallsForCmdBuffer(uint64_t boxedCmd) {
+        mSubDecodeApiCalls.erase(std::remove_if(mSubDecodeApiCalls.begin(),
+                                                mSubDecodeApiCalls.end(),
+                                                [boxedCmd](const auto& entry) {
+                                                    return entry.second == boxedCmd;
+                                                }),
+                                 mSubDecodeApiCalls.end());
     }
 
    private:
