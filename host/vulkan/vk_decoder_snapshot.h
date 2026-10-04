@@ -63,7 +63,9 @@ class VkDecoderSnapshot {
     static void loadReplayBuffers(gfxstream::Stream* stream, std::vector<uint64_t>* outHandleBuffer,
                                   std::vector<uint8_t>* outDecoderBuffer,
                                   std::vector<uint64_t>* outSubCmdBuffer,
-                                  std::vector<uint8_t>* outSubPacketBuffer);
+                                  std::vector<uint8_t>* outSubPacketBuffer,
+                                  std::vector<uint32_t>* outSubDependencyCounts,
+                                  std::vector<uint64_t>* outSubDependencies);
 
     VkSnapshotApiCallHandle createApiCallInfo();
     void destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle handle);
@@ -79,6 +81,8 @@ class VkDecoderSnapshot {
     // snapshot handlers only track handle dependencies and never call
     // setApiTrace themselves, so the sub-decoder provides the bytes here.
     void setApiTrace(VkSnapshotApiCallHandle handle, const uint8_t* packet, size_t packetLenBytes);
+    void setApiDependencies(VkSnapshotApiCallHandle handle, const uint64_t* dependencies,
+                            size_t count);
 
     // Performs bookkeeping to track that a given api call created the given VkObject handles.
     // This is a public function so that `VkDecoderGlobalState` can inform snapshot of any
