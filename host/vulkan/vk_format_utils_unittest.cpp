@@ -113,6 +113,31 @@ TEST(VkFormatUtilsTest, GetTransferInfoRGBA) {
                                                 })));
 }
 
+TEST(VkFormatUtilsTest, GetTransferInfoBC3AndBC7) {
+    for (VkFormat format : {VK_FORMAT_BC3_UNORM_BLOCK, VK_FORMAT_BC7_UNORM_BLOCK}) {
+        TransferInfo transferInfo;
+        const VkExtent3D extent{7, 5, 1};
+        ASSERT_THAT(getFormatTransferInfo(format, extent, &transferInfo), IsTrue());
+        EXPECT_THAT(transferInfo.stagingBufferCopySize, Eq(64));
+        EXPECT_EQ(transferInfo.packFunction, nullptr);
+        EXPECT_EQ(transferInfo.unpackFunction, nullptr);
+        EXPECT_THAT(transferInfo.bufferImageCopies,
+                    ElementsAre(EqsVkBufferImageCopy(VkBufferImageCopy{
+                        .bufferOffset = 0,
+                        .bufferRowLength = 0,
+                        .bufferImageHeight = 0,
+                        .imageSubresource = {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .mipLevel = 0,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                        .imageOffset = {0, 0, 0},
+                        .imageExtent = extent,
+                    })));
+    }
+}
+
 TEST(VkFormatUtilsTest, GetTransferInfoNV12OrNV21) {
     const VkFormat format = VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
     const uint32_t width = 16;
