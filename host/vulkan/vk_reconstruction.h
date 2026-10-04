@@ -41,11 +41,12 @@ class VkReconstruction {
     void clear();
 
     void saveReplayBuffers(gfxstream::Stream* stream);
-    static void loadReplayBuffers(gfxstream::Stream* stream,
-                                  std::vector<uint64_t>* outHandleBuffer,
+    static void loadReplayBuffers(gfxstream::Stream* stream, std::vector<uint64_t>* outHandleBuffer,
                                   std::vector<uint8_t>* outDecoderBuffer,
                                   std::vector<uint64_t>* outSubCmdBuffer,
-                                  std::vector<uint8_t>* outSubPacketBuffer);
+                                  std::vector<uint8_t>* outSubPacketBuffer,
+                                  std::vector<uint32_t>* outSubDependencyCounts,
+                                  std::vector<uint64_t>* outSubDependencies);
 
     enum HandleState { CREATED = 0 };
 
@@ -54,7 +55,10 @@ class VkReconstruction {
 
     void removeHandleFromApiInfo(VkSnapshotApiCallHandle apiCallHandle, uint64_t toRemove);
 
-    void setApiTrace(VkSnapshotApiCallHandle apiCallHandle, const uint8_t* traceBegin, size_t traceBytes);
+    void setApiTrace(VkSnapshotApiCallHandle apiCallHandle, const uint8_t* traceBegin,
+                     size_t traceBytes);
+    void setApiDependencies(VkSnapshotApiCallHandle apiCallHandle, const uint64_t* dependencies,
+                            size_t count);
 
     void dump();
 
