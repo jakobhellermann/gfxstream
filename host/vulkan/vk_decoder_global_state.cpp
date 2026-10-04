@@ -950,8 +950,9 @@ class VkDecoderGlobalState::Impl {
                 std::sort(byCount.begin(), byCount.end(), std::greater<>());
                 const size_t kTop = std::min<size_t>(byCount.size(), 20);
                 for (size_t i = 0; i < kTop; ++i) {
-                    GFXSTREAM_INFO("snapshot replay:   op %u x%llu",
-                                   byCount[i].second, (unsigned long long)byCount[i].first);
+                    GFXSTREAM_INFO("snapshot replay:   op %s(%u) x%llu",
+                                   api_opcode_to_string(byCount[i].second), byCount[i].second,
+                                   (unsigned long long)byCount[i].first);
                 }
                 GFXSTREAM_INFO("snapshot replay: %zu sub-decoded recording packets (%zu bytes)",
                                subCmdBuffer.size(), subPacketBuffer.size());
