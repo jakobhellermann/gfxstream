@@ -157,6 +157,33 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
             GFXSTREAM_DEBUG("[diag] replay packet: offset=%zu op=%s(%u) len=%u",
                             (size_t)(ptr - (unsigned char*)buf), api_opcode_to_string(opcode),
                             opcode, packetLen);
+            // TODO(ai-review): generated, not yet audited
+            // Command buffer replay depends on secondary buffers being complete
+            // before a primary records vkCmdExecuteCommands. Include boxed IDs
+            // so a replay ordering failure can be read from the log.
+            if (packetLen >= 20 && end - ptr >= packetLen &&
+                (opcode == OP_vkBeginCommandBuffer || opcode == OP_vkEndCommandBuffer ||
+                 opcode == OP_vkBeginCommandBufferAsyncGOOGLE ||
+                 opcode == OP_vkEndCommandBufferAsyncGOOGLE || opcode == OP_vkCmdExecuteCommands)) {
+                uint64_t commandBuffer;
+                std::memcpy(&commandBuffer, ptr + 12, sizeof(commandBuffer));
+                GFXSTREAM_DEBUG("snapshot replay: %s cmd=0x%llx offset=%zu",
+                                api_opcode_to_string(opcode), (unsigned long long)commandBuffer,
+                                (size_t)(ptr - (unsigned char*)buf));
+                if (opcode == OP_vkCmdExecuteCommands && packetLen >= 24) {
+                    uint32_t count;
+                    std::memcpy(&count, ptr + 20, sizeof(count));
+                    if (count <= (packetLen - 24) / sizeof(uint64_t)) {
+                        for (uint32_t i = 0; i < count; ++i) {
+                            uint64_t secondary;
+                            std::memcpy(&secondary, ptr + 24 + i * sizeof(secondary),
+                                        sizeof(secondary));
+                            GFXSTREAM_DEBUG("snapshot replay:   secondary[%u]=0x%llx", i,
+                                            (unsigned long long)secondary);
+                        }
+                    }
+                }
+            }
         }
         if (end - ptr < packetLen) return ptr - (unsigned char*)buf;
         gfx_logger.record(ptr, std::min(size_t(packetLen + 8), size_t(end - ptr)));
