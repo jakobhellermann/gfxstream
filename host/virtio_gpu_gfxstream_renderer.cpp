@@ -210,6 +210,31 @@ RendererPtr InitRenderer(uint32_t displayWidth,
                          uint32_t displayHeight,
                          int rendererFlags,
                          const gfxstream::host::FeatureSet& features) {
+    // TODO(ai-review): generated, not yet audited
+    // The GFXSTREAM_LOG_LEVEL env is normally parsed in RenderLibImpl::setLogger,
+    // but virtio-gpu (rutabaga/kumquat) setups never call setLogger — they go
+    // through stream_renderer_init → InitRenderer. Honor the env here so
+    // DEBUG-level diagnostics (e.g. RenderThread exit reasons) are visible.
+    {
+        const std::string logLevelStr =
+            gfxstream::base::getEnvironmentVariable("GFXSTREAM_LOG_LEVEL");
+        std::optional<gfxstream::host::LogLevel> logLevel;
+        if (logLevelStr == "error") {
+            logLevel = gfxstream::host::LogLevel::kError;
+        } else if (logLevelStr == "warning") {
+            logLevel = gfxstream::host::LogLevel::kWarning;
+        } else if (logLevelStr == "info") {
+            logLevel = gfxstream::host::LogLevel::kInfo;
+        } else if (logLevelStr == "debug") {
+            logLevel = gfxstream::host::LogLevel::kDebug;
+        } else if (logLevelStr == "verbose") {
+            logLevel = gfxstream::host::LogLevel::kVerbose;
+        }
+        if (logLevel) {
+            gfxstream::host::SetGfxstreamLogLevel(*logLevel);
+        }
+    }
+
     GFXSTREAM_DEBUG("Initializing renderer with width:%u height:%u renderer-flags:0x%x",
                     displayWidth, displayHeight, rendererFlags);
 

@@ -906,7 +906,10 @@ class VkDecoderGlobalState::Impl {
         {
             std::vector<uint64_t> handleReplayBuffer;
             std::vector<uint8_t> decoderReplayBuffer;
-            VkDecoderSnapshot::loadReplayBuffers(stream, &handleReplayBuffer, &decoderReplayBuffer);
+            std::vector<uint64_t> subCmdBuffer;
+            std::vector<uint8_t> subPacketBuffer;
+            VkDecoderSnapshot::loadReplayBuffers(stream, &handleReplayBuffer, &decoderReplayBuffer,
+                                                 &subCmdBuffer, &subPacketBuffer);
 
             sBoxedHandleManager.replayHandles(handleReplayBuffer);
 
@@ -949,6 +952,35 @@ class VkDecoderGlobalState::Impl {
                 for (size_t i = 0; i < kTop; ++i) {
                     GFXSTREAM_INFO("snapshot replay:   op %u x%llu",
                                    byCount[i].second, (unsigned long long)byCount[i].first);
+                }
+                GFXSTREAM_INFO("snapshot replay: %zu sub-decoded recording packets (%zu bytes)",
+                               subCmdBuffer.size(), subPacketBuffer.size());
+
+                // TODO(ai-review): generated, not yet audited
+                // Re-register the raw sub-decoded (command buffer recording)
+                // packets into the freshly loaded reconstruction. During the
+                // main replay these packets run through the main decoder,
+                // which does not feed them back into the sub-decode list —
+                // without this, a snapshot of the restored state silently
+                // loses all command buffer recording content (multi-cycle
+                // restore would produce empty buffers again).
+                {
+                    std::lock_guard<std::mutex> lock(mMutex);
+                    size_t pos = 0;
+                    size_t registered = 0;
+                    for (size_t i = 0;
+                         i < subCmdBuffer.size() && pos + 8 <= subPacketBuffer.size(); ++i) {
+                        const uint32_t packetLen =
+                            *(const uint32_t*)(subPacketBuffer.data() + pos + 4);
+                        if (packetLen < 8 || pos + packetLen > subPacketBuffer.size()) break;
+                        VkSnapshotApiCallHandle h = snapshot()->createApiCallInfo();
+                        snapshot()->addSubDecodeApiCall(h, subCmdBuffer[i]);
+                        snapshot()->setApiTrace(h, subPacketBuffer.data() + pos, packetLen);
+                        registered++;
+                        pos += packetLen;
+                    }
+                    GFXSTREAM_INFO("snapshot replay: re-registered %zu recording packets",
+                                   registered);
                 }
             }
         }
