@@ -1158,18 +1158,27 @@ class VkDecoderGlobalState::Impl {
                             .descriptorCount = 1,
                             .descriptorType = descriptorType,
                         };
+                        bool staleWrite = false;
                         switch (writeType) {
                             case DescriptorSetInfo::DescriptorWriteType::ImageInfo: {
                                 tmpImageInfos.push_back(std::make_unique<VkDescriptorImageInfo>());
                                 writeDescriptorSet.pImageInfo = tmpImageInfos.back().get();
                                 VkDescriptorImageInfo& imageInfo = *tmpImageInfos.back();
                                 stream->read(&imageInfo, sizeof(imageInfo));
-                                imageInfo.imageView = descriptorTypeContainsImage(descriptorType)
-                                                          ? unbox_VkImageView(imageInfo.imageView)
-                                                          : 0;
-                                imageInfo.sampler = descriptorTypeContainsSampler(descriptorType)
-                                                        ? unbox_VkSampler(imageInfo.sampler)
-                                                        : 0;
+                                if (descriptorTypeContainsImage(descriptorType)) {
+                                    const VkImageView boxed = imageInfo.imageView;
+                                    imageInfo.imageView = try_unbox_VkImageView(boxed);
+                                    staleWrite |= boxed && !imageInfo.imageView;
+                                } else {
+                                    imageInfo.imageView = 0;
+                                }
+                                if (descriptorTypeContainsSampler(descriptorType)) {
+                                    const VkSampler boxed = imageInfo.sampler;
+                                    imageInfo.sampler = try_unbox_VkSampler(boxed);
+                                    staleWrite |= boxed && !imageInfo.sampler;
+                                } else {
+                                    imageInfo.sampler = 0;
+                                }
                             } break;
                             case DescriptorSetInfo::DescriptorWriteType::BufferInfo: {
                                 tmpBufferInfos.push_back(
@@ -1177,14 +1186,18 @@ class VkDecoderGlobalState::Impl {
                                 writeDescriptorSet.pBufferInfo = tmpBufferInfos.back().get();
                                 VkDescriptorBufferInfo& bufferInfo = *tmpBufferInfos.back();
                                 stream->read(&bufferInfo, sizeof(bufferInfo));
-                                bufferInfo.buffer = unbox_VkBuffer(bufferInfo.buffer);
+                                const VkBuffer boxed = bufferInfo.buffer;
+                                bufferInfo.buffer = try_unbox_VkBuffer(boxed);
+                                staleWrite |= boxed && !bufferInfo.buffer;
                             } break;
                             case DescriptorSetInfo::DescriptorWriteType::BufferView: {
                                 tmpBufferViews.push_back(std::make_unique<VkBufferView>());
                                 writeDescriptorSet.pTexelBufferView = tmpBufferViews.back().get();
                                 VkBufferView& bufferView = *tmpBufferViews.back();
                                 stream->read(&bufferView, sizeof(bufferView));
-                                bufferView = unbox_VkBufferView(bufferView);
+                                const VkBufferView boxed = bufferView;
+                                bufferView = try_unbox_VkBufferView(boxed);
+                                staleWrite |= boxed && !bufferView;
                             } break;
                             case DescriptorSetInfo::DescriptorWriteType::InlineUniformBlock: {
                                 uint32_t dataSize = stream->getBe32();
@@ -1221,7 +1234,17 @@ class VkDecoderGlobalState::Impl {
                             default:
                                 break;
                         }
-                        writeDescriptorSets.push_back(writeDescriptorSet);
+                        // TODO(ai-review): generated, not yet audited
+                        // A live descriptor set may retain an obsolete write
+                        // after the referenced resource was destroyed.
+                        if (staleWrite) {
+                            GFXSTREAM_WARNING(
+                                "snapshot load: skip stale descriptor write set=0x%llx binding=%u "
+                                "element=%u",
+                                (unsigned long long)poolId, binding, arrayElement);
+                        } else {
+                            writeDescriptorSets.push_back(writeDescriptorSet);
+                        }
                     }
                 }
                 std::vector<uint32_t> whichPool(poolIds.size(), 0);
