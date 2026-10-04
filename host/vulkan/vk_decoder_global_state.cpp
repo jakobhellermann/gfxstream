@@ -929,6 +929,28 @@ class VkDecoderGlobalState::Impl {
                                 consumed, decoderReplayBuffer.size());
                 return false;
             }
+
+            // What did the replay actually touch? Per-opcode histogram of the
+            // replayed stream. Opcode numbers map to functions via the
+            // `#define OP_vk*` table in the generated cereal headers.
+            {
+                auto replayOps = decoderForLoading.takeSnapshotReplayOpCounts();
+                uint64_t totalCalls = 0;
+                for (const auto& [op, count] : replayOps) totalCalls += count;
+                GFXSTREAM_INFO("snapshot replay: %llu api calls across %zu distinct opcodes",
+                               (unsigned long long)totalCalls, replayOps.size());
+                std::vector<std::pair<uint64_t, uint32_t>> byCount;
+                byCount.reserve(replayOps.size());
+                for (const auto& [op, count] : replayOps) {
+                    byCount.emplace_back(count, op);
+                }
+                std::sort(byCount.begin(), byCount.end(), std::greater<>());
+                const size_t kTop = std::min<size_t>(byCount.size(), 20);
+                for (size_t i = 0; i < kTop; ++i) {
+                    GFXSTREAM_INFO("snapshot replay:   op %u x%llu",
+                                   byCount[i].second, (unsigned long long)byCount[i].first);
+                }
+            }
         }
 
         {
