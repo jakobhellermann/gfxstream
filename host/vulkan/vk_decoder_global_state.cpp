@@ -901,6 +901,8 @@ class VkDecoderGlobalState::Impl {
             }
         }
 
+        std::vector<uint8_t> recordingReplayBuffer;
+
         // Replay command stream:
         GFXSTREAM_DEBUG("snapshot load: replay command stream");
         {
@@ -911,6 +913,7 @@ class VkDecoderGlobalState::Impl {
             std::vector<uint32_t> subDependencyCounts;
             std::vector<uint64_t> subDependencies;
             VkDecoderSnapshot::loadReplayBuffers(stream, &handleReplayBuffer, &decoderReplayBuffer,
+                                                 &recordingReplayBuffer,
                                                  &subCmdBuffer, &subPacketBuffer,
                                                  &subDependencyCounts, &subDependencies);
             size_t dependencyTotal = 0;
@@ -1314,7 +1317,27 @@ class VkDecoderGlobalState::Impl {
 
             // semaphores
             loadSemaphores(stream);
-
+        }
+        if (!recordingReplayBuffer.empty()) {
+            VkDecoder decoderForRecording;
+            decoderForRecording.setForSnapshotLoad(true);
+            TrivialStream trivialStream;
+            auto resources = ProcessResources::create();
+            VkDecoderContext context = {
+                .processName = nullptr,
+                .gfxApiLogger = &gfxLogger,
+            };
+            size_t consumed = decoderForRecording.decode(recordingReplayBuffer.data(),
+                                                         recordingReplayBuffer.size(), &trivialStream,
+                                                         resources.get(), context);
+            if (consumed != recordingReplayBuffer.size()) {
+                GFXSTREAM_ERROR("Failed to completely decode snapshot recording buffer. Consumed %zu of %zu bytes",
+                                consumed, recordingReplayBuffer.size());
+                return false;
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
             mSnapshotLoadBoxedInstance2ContextId.clear();
             mSnapshotState = SnapshotState::Normal;
         }

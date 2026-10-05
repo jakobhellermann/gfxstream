@@ -62,6 +62,7 @@ class VkDecoderSnapshot {
     void saveReplayBuffers(gfxstream::Stream* stream);
     static void loadReplayBuffers(gfxstream::Stream* stream, std::vector<uint64_t>* outHandleBuffer,
                                   std::vector<uint8_t>* outDecoderBuffer,
+                                  std::vector<uint8_t>* outRecordingReplayBuffer,
                                   std::vector<uint64_t>* outSubCmdBuffer,
                                   std::vector<uint8_t>* outSubPacketBuffer,
                                   std::vector<uint32_t>* outSubDependencyCounts,

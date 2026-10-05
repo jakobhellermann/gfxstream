@@ -215,8 +215,6 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
             subTraceBytes += rewrittenLen;
         }
     }
-    apiTraceBuffer.resize(totalApiTraceSize + subTraceBytes);
-    memcpy(apiTraceBuffer.data() + totalApiTraceSize, subTraceBuffer.data(), subTraceBuffer.size());
     GFXSTREAM_INFO(
         "snapshot save: %zu graph api calls, %zu sub-decoded recording calls (%zu bytes, %zu "
         "resolved)",
@@ -224,6 +222,7 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
 
     gfxstream::host::saveBuffer(stream, createdHandleBuffer);
     gfxstream::host::saveBuffer(stream, apiTraceBuffer);
+    gfxstream::host::saveBuffer(stream, subTraceBuffer);
     gfxstream::host::saveBuffer(stream, subCmdBuffer);
     gfxstream::host::saveBuffer(stream, subPacketBuffer);
     gfxstream::host::saveBuffer(stream, subDependencyCounts);
@@ -234,6 +233,7 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
 void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
                                          std::vector<uint64_t>* outHandleBuffer,
                                          std::vector<uint8_t>* outDecoderBuffer,
+                                         std::vector<uint8_t>* outRecordingReplayBuffer,
                                          std::vector<uint64_t>* outSubCmdBuffer,
                                          std::vector<uint8_t>* outSubPacketBuffer,
                                          std::vector<uint32_t>* outSubDependencyCounts,
@@ -242,6 +242,7 @@ void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
 
     gfxstream::host::loadBuffer(stream, outHandleBuffer);
     gfxstream::host::loadBuffer(stream, outDecoderBuffer);
+    gfxstream::host::loadBuffer(stream, outRecordingReplayBuffer);
     gfxstream::host::loadBuffer(stream, outSubCmdBuffer);
     gfxstream::host::loadBuffer(stream, outSubPacketBuffer);
     gfxstream::host::loadBuffer(stream, outSubDependencyCounts);
