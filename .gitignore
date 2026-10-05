@@ -296,3 +296,5 @@ TestResults.qpa
 .cache/
 compile_commands.json
 .gdb_history
+
+/result*
