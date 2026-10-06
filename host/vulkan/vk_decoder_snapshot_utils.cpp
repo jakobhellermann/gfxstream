@@ -14,6 +14,10 @@
 
 #include "vk_decoder_snapshot_utils.h"
 
+#include <chrono>
+#include <cstdarg>
+#include <cstdio>
+
 #include "gfxstream/common/logging.h"
 #include "vk_common_operations.h"
 #include "vk_utils.h"
@@ -24,6 +28,17 @@ namespace host {
 namespace vk {
 
 namespace {
+
+// VALO-PROF: ad-hoc timing/telemetry for the snapshot save path.
+void profLog(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+void profLog(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    std::fputs("[VALO-PROF] ", stderr);
+    std::vfprintf(stderr, fmt, args);
+    std::fputc('\n', stderr);
+    va_end(args);
+}
 
 uint32_t GetMemoryType(const PhysicalDeviceInfo& physicalDevice,
                        const VkMemoryRequirements& memoryRequirements,
@@ -36,10 +51,41 @@ uint32_t GetMemoryType(const PhysicalDeviceInfo& physicalDevice,
         if ((props.memoryTypes[i].propertyFlags & memoryProperties) != memoryProperties) {
             continue;
         }
+        // VALO-PROF
+        profLog("memtype idx=%u flags=0x%x heap=%u bits=0x%x", i,
+                props.memoryTypes[i].propertyFlags, props.memoryTypes[i].heapIndex,
+                memoryRequirements.memoryTypeBits);
         return i;
     }
     GFXSTREAM_FATAL("Cannot find memory type for snapshot save.");
     return -1;
+}
+
+// VALO-PROF/readback-perf: prefer write-back cached host memory for the CPU
+// read side of the save path. Plain HOST_VISIBLE|HOST_COHERENT memory is
+// mapped write-combined on many drivers (measured on RADV: ~0.3 GB/s reads
+// vs ~46 GB/s on the HOST_CACHED type of the same heap).
+uint32_t GetReadbackMemoryType(const PhysicalDeviceInfo& physicalDevice,
+                               const VkMemoryRequirements& memoryRequirements) {
+    const auto& props = physicalDevice.memoryPropertiesHelper->getHostMemoryProperties();
+    const VkMemoryPropertyFlags cached = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                          VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    for (uint32_t i = 0; i < props.memoryTypeCount; i++) {
+        if (!(memoryRequirements.memoryTypeBits & (1 << i))) {
+            continue;
+        }
+        if ((props.memoryTypes[i].propertyFlags & cached) != cached) {
+            continue;
+        }
+        profLog("readback memtype idx=%u flags=0x%x (cached)", i,
+                props.memoryTypes[i].propertyFlags);
+        return i;
+    }
+    profLog("readback memtype: no HOST_CACHED type, falling back");
+    return GetMemoryType(physicalDevice, memoryRequirements,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
@@ -107,8 +153,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
                                             &readbackBufferMemoryRequirements);
 
     const auto readbackBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
     // Staging memory
     // TODO(b/323064243): reuse staging memory
     VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
@@ -129,6 +174,11 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
         return false;
     }
 
+    // VALO-PROF
+    const auto profT0 = std::chrono::steady_clock::now();
+    double profGpuMs = 0.0;
+    double profWriteMs = 0.0;
+    uint64_t profWriteBytes = 0;
     for (uint32_t mipLevel = 0; mipLevel < imageInfo->imageCreateInfoShallow.mipLevels;
          mipLevel++) {
         for (uint32_t arrayLayer = 0; arrayLayer < imageInfo->imageCreateInfoShallow.arrayLayers;
@@ -200,15 +250,35 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
                 .commandBufferCount = 1,
                 .pCommandBuffers = &commandBuffer,
             };
+            const auto profSubT0 = std::chrono::steady_clock::now();
             VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
             VK_CHECK(
                 dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
             VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
+            profGpuMs +=
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - profSubT0)
+                    .count();
             auto bytes = mipmapStagingBufferSize;
             stream->putBe64(bytes);
+            const auto profW0 = std::chrono::steady_clock::now();
             stream->write(mapped, bytes);
+            profWriteMs +=
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - profW0)
+                    .count();
+            profWriteBytes += bytes;
         }
     }
+    // VALO-PROF
+    profLog(
+        "image fmt=%u %ux%ux%u mips=%u layers=%u: gpu=%.1fms write=%.1fms bytes=%llu "
+        "(%.0f MB/s)",
+        imageCreateInfo.format, imageCreateInfo.extent.width, imageCreateInfo.extent.height,
+        imageCreateInfo.extent.depth, imageInfo->imageCreateInfoShallow.mipLevels,
+        imageInfo->imageCreateInfoShallow.arrayLayers, profGpuMs, profWriteMs,
+        static_cast<unsigned long long>(profWriteBytes),
+        profWriteMs > 0.0 ? static_cast<double>(profWriteBytes) / (profWriteMs * 1024.0) : 0.0);
     dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
     dispatch->vkUnmapMemory(stateBlock->device, readbackMemory);
     dispatch->vkDestroyBuffer(stateBlock->device, readbackBuffer, nullptr);
@@ -459,8 +529,7 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
                                             &readbackBufferMemoryRequirements);
 
     const auto readbackBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
     // Staging memory
     // TODO(b/323064243): reuse staging memory
     VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
