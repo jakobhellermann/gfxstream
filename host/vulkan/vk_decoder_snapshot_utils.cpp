@@ -99,8 +99,110 @@ VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
 constexpr uint32_t kBadImageSnapshot = 0xbaadbeef;
 constexpr uint32_t kGoodImageSnapshot = 0x900df00d;
 }  // namespace
+SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock) {
+    VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    SnapshotStagingContext staging;
+    VkCommandBufferAllocateInfo allocInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = stateBlock->commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VK_CHECK(dispatch->vkAllocateCommandBuffers(stateBlock->device, &allocInfo,
+                                                &staging.commandBuffer));
+    VkFenceCreateInfo fenceCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    VK_CHECK(
+        dispatch->vkCreateFence(stateBlock->device, &fenceCreateInfo, nullptr, &staging.fence));
+    return staging;
+}
 
-bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage image,
+void destroySnapshotStagingContext(StateBlock* stateBlock, SnapshotStagingContext* staging) {
+    VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    if (staging->mapped != nullptr) {
+        dispatch->vkUnmapMemory(stateBlock->device, staging->memory);
+        staging->mapped = nullptr;
+    }
+    if (staging->memory != VK_NULL_HANDLE) {
+        dispatch->vkFreeMemory(stateBlock->device, staging->memory, nullptr);
+        staging->memory = VK_NULL_HANDLE;
+    }
+    if (staging->buffer != VK_NULL_HANDLE) {
+        dispatch->vkDestroyBuffer(stateBlock->device, staging->buffer, nullptr);
+        staging->buffer = VK_NULL_HANDLE;
+    }
+    if (staging->fence != VK_NULL_HANDLE) {
+        dispatch->vkDestroyFence(stateBlock->device, staging->fence, nullptr);
+        staging->fence = VK_NULL_HANDLE;
+    }
+    if (staging->commandBuffer != VK_NULL_HANDLE) {
+        dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1,
+                                       &staging->commandBuffer);
+        staging->commandBuffer = VK_NULL_HANDLE;
+    }
+    staging->capacity = 0;
+}
+
+bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContext* staging,
+                                   VkDeviceSize needed) {
+    if (staging->capacity >= needed) {
+        return true;
+    }
+    VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    if (staging->mapped != nullptr) {
+        dispatch->vkUnmapMemory(stateBlock->device, staging->memory);
+        staging->mapped = nullptr;
+    }
+    if (staging->memory != VK_NULL_HANDLE) {
+        dispatch->vkFreeMemory(stateBlock->device, staging->memory, nullptr);
+        staging->memory = VK_NULL_HANDLE;
+    }
+    if (staging->buffer != VK_NULL_HANDLE) {
+        dispatch->vkDestroyBuffer(stateBlock->device, staging->buffer, nullptr);
+        staging->buffer = VK_NULL_HANDLE;
+    }
+    staging->capacity = 0;
+
+    VkBufferCreateInfo bufferCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = needed,
+        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VK_CHECK(
+        dispatch->vkCreateBuffer(stateBlock->device, &bufferCreateInfo, nullptr, &staging->buffer));
+
+    VkMemoryRequirements stagingBufferMemoryRequirements{};
+    dispatch->vkGetBufferMemoryRequirements(stateBlock->device, staging->buffer,
+                                            &stagingBufferMemoryRequirements);
+
+    const auto stagingBufferMemoryType =
+        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, stagingBufferMemoryRequirements);
+    VkMemoryAllocateInfo stagingBufferMemoryAllocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = stagingBufferMemoryRequirements.size,
+        .memoryTypeIndex = stagingBufferMemoryType,
+    };
+    VK_CHECK(dispatch->vkAllocateMemory(stateBlock->device, &stagingBufferMemoryAllocateInfo,
+                                       nullptr, &staging->memory));
+    VK_CHECK(dispatch->vkBindBufferMemory(stateBlock->device, staging->buffer, staging->memory, 0));
+
+    if (dispatch->vkMapMemory(stateBlock->device, staging->memory, 0, VK_WHOLE_SIZE,
+                              VkMemoryMapFlags{}, &staging->mapped) != VK_SUCCESS ||
+        staging->mapped == nullptr) {
+        GFXSTREAM_ERROR("Failed to map readback staging memory for snapshot save");
+        return false;
+    }
+    staging->capacity = needed;
+    // VALO-PROF
+    profLog("staging grow: capacity=%llu bytes",
+            static_cast<unsigned long long>(staging->capacity));
+    return true;
+}
+
+bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo) {
     if (imageInfo->layout == VK_IMAGE_LAYOUT_UNDEFINED) {
         stream->putBe32(kBadImageSnapshot);
@@ -114,6 +216,8 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
 
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
     const VkImageCreateInfo& imageCreateInfo = imageInfo->imageCreateInfoShallow;
+    const uint32_t mipLevels = imageInfo->imageCreateInfoShallow.mipLevels;
+    const uint32_t arrayLayers = imageInfo->imageCreateInfoShallow.arrayLayers;
 
     TransferInfo transferInfo;
     if (!getFormatTransferInfo(imageCreateInfo.format, imageCreateInfo.extent, &transferInfo) ||
@@ -121,84 +225,59 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
         stream->putBe32(kBadImageSnapshot);
         return true;
     }
-    VkDeviceSize stagingBufferSize = transferInfo.stagingBufferCopySize;
+
+    // Size all (mip level, array layer) regions up front so every copy for
+    // this image fits one command buffer, one submit and the shared staging
+    // allocation (TODO(b/323064243): previously one submit + allocation per
+    // region). Region bases are 16-byte aligned, which covers any format's
+    // buffer offset alignment; plane-relative offsets inside a region are
+    // preserved by only shifting the base.
+    constexpr VkDeviceSize kRegionAlignment = 16;
+    std::vector<VkDeviceSize> regionSizes;
+    std::vector<TransferInfo> regionTransferInfos;
+    VkDeviceSize stagingNeeded = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        VkExtent3D mipmapExtent = getMipmapExtent(imageCreateInfo.extent, mipLevel);
+        TransferInfo mipmapTransferInfo;
+        if (!getFormatTransferInfo(imageCreateInfo.format, mipmapExtent, &mipmapTransferInfo)) {
+            GFXSTREAM_ERROR("Failed to get transfer info for snapshot save");
+            return false;
+        }
+        // A mip level may legitimately end up with a zero staging size; the
+        // original per-region path wrote an empty region for it, keep that
+        // stream format (TODO(b/323064243)).
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
+            regionSizes.push_back(mipmapTransferInfo.stagingBufferCopySize);
+            regionTransferInfos.push_back(mipmapTransferInfo);
+            stagingNeeded = (stagingNeeded + mipmapTransferInfo.stagingBufferCopySize +
+                             kRegionAlignment - 1) &
+                            ~(kRegionAlignment - 1);
+        }
+    }
 
     stream->putBe32(kGoodImageSnapshot);
-    VkCommandBufferAllocateInfo allocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = stateBlock->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    VkCommandBuffer commandBuffer;
-    VK_CHECK(dispatch->vkAllocateCommandBuffers(stateBlock->device, &allocInfo,
-                                                      &commandBuffer));
-    VkFenceCreateInfo fenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(dispatch->vkCreateFence(stateBlock->device, &fenceCreateInfo, nullptr, &fence));
-    VkBufferCreateInfo bufferCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = stagingBufferSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    VkBuffer readbackBuffer;
-    VK_CHECK(
-        dispatch->vkCreateBuffer(stateBlock->device, &bufferCreateInfo, nullptr, &readbackBuffer));
-
-    VkMemoryRequirements readbackBufferMemoryRequirements{};
-    dispatch->vkGetBufferMemoryRequirements(stateBlock->device, readbackBuffer,
-                                            &readbackBufferMemoryRequirements);
-
-    const auto readbackBufferMemoryType =
-        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
-    // Staging memory
-    // TODO(b/323064243): reuse staging memory
-    VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = readbackBufferMemoryRequirements.size,
-        .memoryTypeIndex = readbackBufferMemoryType,
-    };
-    VkDeviceMemory readbackMemory;
-    VK_CHECK(dispatch->vkAllocateMemory(stateBlock->device, &readbackBufferMemoryAllocateInfo,
-                                              nullptr, &readbackMemory));
-    VK_CHECK(
-        dispatch->vkBindBufferMemory(stateBlock->device, readbackBuffer, readbackMemory, 0));
-
-    void* mapped = nullptr;
-    if (dispatch->vkMapMemory(stateBlock->device, readbackMemory, 0, VK_WHOLE_SIZE,
-                                         VkMemoryMapFlags{}, &mapped) != VK_SUCCESS || mapped == nullptr) {
-        GFXSTREAM_ERROR("Failed to map memory for image snapshot save");
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging, stagingNeeded)) {
         return false;
     }
 
-    // VALO-PROF
-    const auto profT0 = std::chrono::steady_clock::now();
-    double profGpuMs = 0.0;
-    double profWriteMs = 0.0;
-    uint64_t profWriteBytes = 0;
-    for (uint32_t mipLevel = 0; mipLevel < imageInfo->imageCreateInfoShallow.mipLevels;
-         mipLevel++) {
-        for (uint32_t arrayLayer = 0; arrayLayer < imageInfo->imageCreateInfoShallow.arrayLayers;
-             arrayLayer++) {
-            // TODO(b/323064243): reuse command buffers
-            VkCommandBufferBeginInfo beginInfo{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            };
-            if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-                GFXSTREAM_ERROR("Failed to start command buffer on snapshot save");
-                return false;
-            }
+    VkCommandBuffer commandBuffer = staging->commandBuffer;
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        GFXSTREAM_ERROR("Failed to start command buffer on snapshot save");
+        return false;
+    }
 
-            VkExtent3D mipmapExtent = getMipmapExtent(imageCreateInfo.extent, mipLevel);
-            if (!getFormatTransferInfo(imageCreateInfo.format, mipmapExtent, &transferInfo)) {
-                GFXSTREAM_ERROR("Failed to get transfer info for snapshot save");
-                return false;
-            }
-            VkDeviceSize mipmapStagingBufferSize = transferInfo.stagingBufferCopySize;
-            std::vector<VkBufferImageCopy>& bufferImageCopies = transferInfo.bufferImageCopies;
+    VkDeviceSize regionBase = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
+            TransferInfo& mipmapTransferInfo =
+                regionTransferInfos[mipLevel * arrayLayers + arrayLayer];
+            const VkDeviceSize mipmapStagingBufferSize =
+                regionSizes[mipLevel * arrayLayers + arrayLayer];
+            std::vector<VkBufferImageCopy>& bufferImageCopies =
+                mipmapTransferInfo.bufferImageCopies;
             VkImageAspectFlags aspects = 0;
             for (const auto& copy : bufferImageCopies) {
                 aspects |= copy.imageSubresource.aspectMask;
@@ -227,9 +306,10 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
             for (auto& region : bufferImageCopies) {
                 region.imageSubresource.mipLevel = mipLevel;
                 region.imageSubresource.baseArrayLayer = arrayLayer;
+                region.bufferOffset += regionBase;
                 dispatch->vkCmdCopyImageToBuffer(commandBuffer, image,
                                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                                 readbackBuffer, 1, &region);
+                                                 staging->buffer, 1, &region);
             }
 
             // Cannot really translate it back to VK_IMAGE_LAYOUT_PREINITIALIZED
@@ -242,32 +322,45 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
                                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                                                nullptr, 1, &imgMemoryBarrier);
             }
-            VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
+            regionBase =
+                (regionBase + mipmapStagingBufferSize + kRegionAlignment - 1) &
+                ~(kRegionAlignment - 1);
+        }
+    }
+    VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
 
-            // Execute the command to copy image
-            VkSubmitInfo submitInfo = {
-                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                .commandBufferCount = 1,
-                .pCommandBuffers = &commandBuffer,
-            };
-            const auto profSubT0 = std::chrono::steady_clock::now();
-            VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-            VK_CHECK(
-                dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
-            VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
-            profGpuMs +=
-                std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - profSubT0)
-                    .count();
-            auto bytes = mipmapStagingBufferSize;
+    // Execute all copies of this image with a single submit + fence wait.
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+    };
+    // VALO-PROF
+    const auto profSubT0 = std::chrono::steady_clock::now();
+    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
+    VK_CHECK(
+        dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
+    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
+    const double profGpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profSubT0)
+            .count();
+
+    // Write out the staged regions in the same order they were copied.
+    double profWriteMs = 0.0;
+    uint64_t profWriteBytes = 0;
+    regionBase = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
+            auto bytes = regionSizes[mipLevel * arrayLayers + arrayLayer];
             stream->putBe64(bytes);
             const auto profW0 = std::chrono::steady_clock::now();
-            stream->write(mapped, bytes);
+            stream->write(static_cast<const char*>(staging->mapped) + regionBase, bytes);
             profWriteMs +=
                 std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - profW0)
                     .count();
             profWriteBytes += bytes;
+            regionBase = (regionBase + bytes + kRegionAlignment - 1) & ~(kRegionAlignment - 1);
         }
     }
     // VALO-PROF
@@ -275,15 +368,9 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
         "image fmt=%u %ux%ux%u mips=%u layers=%u: gpu=%.1fms write=%.1fms bytes=%llu "
         "(%.0f MB/s)",
         imageCreateInfo.format, imageCreateInfo.extent.width, imageCreateInfo.extent.height,
-        imageCreateInfo.extent.depth, imageInfo->imageCreateInfoShallow.mipLevels,
-        imageInfo->imageCreateInfoShallow.arrayLayers, profGpuMs, profWriteMs,
+        imageCreateInfo.extent.depth, mipLevels, arrayLayers, profGpuMs, profWriteMs,
         static_cast<unsigned long long>(profWriteBytes),
         profWriteMs > 0.0 ? static_cast<double>(profWriteBytes) / (profWriteMs * 1024.0) : 0.0);
-    dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
-    dispatch->vkUnmapMemory(stateBlock->device, readbackMemory);
-    dispatch->vkDestroyBuffer(stateBlock->device, readbackBuffer, nullptr);
-    dispatch->vkFreeMemory(stateBlock->device, readbackMemory, nullptr);
-    dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1, &commandBuffer);
     return true;
 }
 
@@ -492,7 +579,8 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
     return true;
 }
 
-bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuffer buffer,
+bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                       SnapshotStagingContext* staging, VkBuffer buffer,
                        const BufferInfo* bufferInfo) {
     VkBufferUsageFlags requiredUsages =
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -500,55 +588,15 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
         return true;
     }
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
-    VkCommandBufferAllocateInfo allocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = stateBlock->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    VkCommandBuffer commandBuffer;
-    VK_CHECK(dispatch->vkAllocateCommandBuffers(stateBlock->device, &allocInfo,
-                                                      &commandBuffer));
-    VkFenceCreateInfo fenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(dispatch->vkCreateFence(stateBlock->device, &fenceCreateInfo, nullptr, &fence));
-    VkBufferCreateInfo bufferCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = static_cast<VkDeviceSize>(bufferInfo->size),
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    VkBuffer readbackBuffer;
-    VK_CHECK(
-        dispatch->vkCreateBuffer(stateBlock->device, &bufferCreateInfo, nullptr, &readbackBuffer));
 
-    VkMemoryRequirements readbackBufferMemoryRequirements{};
-    dispatch->vkGetBufferMemoryRequirements(stateBlock->device, readbackBuffer,
-                                            &readbackBufferMemoryRequirements);
-
-    const auto readbackBufferMemoryType =
-        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
-    // Staging memory
-    // TODO(b/323064243): reuse staging memory
-    VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = readbackBufferMemoryRequirements.size,
-        .memoryTypeIndex = readbackBufferMemoryType,
-    };
-    VkDeviceMemory readbackMemory;
-    VK_CHECK(dispatch->vkAllocateMemory(stateBlock->device, &readbackBufferMemoryAllocateInfo,
-                                              nullptr, &readbackMemory));
-    VK_CHECK(
-        dispatch->vkBindBufferMemory(stateBlock->device, readbackBuffer, readbackMemory, 0));
-
-    void* mapped = nullptr;
-    if (dispatch->vkMapMemory(stateBlock->device, readbackMemory, 0, VK_WHOLE_SIZE,
-                                         VkMemoryMapFlags{}, &mapped) != VK_SUCCESS || mapped == nullptr) {
-        GFXSTREAM_ERROR("Failed to map memory for buffer snapshot save");
+    // TODO(b/323064243): previously a staging buffer, command buffer and
+    // fence were allocated per buffer; reuse the shared per-device context.
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging,
+                                       static_cast<VkDeviceSize>(bufferInfo->size))) {
         return false;
     }
+
+    VkCommandBuffer commandBuffer = staging->commandBuffer;
 
     VkBufferCopy bufferCopy = {
         .srcOffset = 0,
@@ -563,14 +611,14 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
         GFXSTREAM_ERROR("Failed to start command buffer on snapshot save");
         return false;
     }
-    dispatch->vkCmdCopyBuffer(commandBuffer, buffer, readbackBuffer, 1, &bufferCopy);
+    dispatch->vkCmdCopyBuffer(commandBuffer, buffer, staging->buffer, 1, &bufferCopy);
     VkBufferMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
                                   .pNext = nullptr,
                                   .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
                                   .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
                                   .srcQueueFamilyIndex = 0xFFFFFFFF,
                                   .dstQueueFamilyIndex = 0xFFFFFFFF,
-                                  .buffer = readbackBuffer,
+                                  .buffer = staging->buffer,
                                   .offset = 0,
                                   .size = bufferInfo->size};
     dispatch->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -584,17 +632,27 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    VK_CHECK(dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
-    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
+    // VALO-PROF
+    const auto profSubT0 = std::chrono::steady_clock::now();
+    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
+    VK_CHECK(
+        dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
+    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
+    const double profGpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profSubT0)
+            .count();
     stream->putBe64(bufferInfo->size);
-    stream->write(mapped, bufferInfo->size);
-
-    dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
-    dispatch->vkUnmapMemory(stateBlock->device, readbackMemory);
-    dispatch->vkDestroyBuffer(stateBlock->device, readbackBuffer, nullptr);
-    dispatch->vkFreeMemory(stateBlock->device, readbackMemory, nullptr);
-    dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1, &commandBuffer);
+    const auto profW0 = std::chrono::steady_clock::now();
+    stream->write(staging->mapped, bufferInfo->size);
+    const double profWriteMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profW0)
+            .count();
+    // VALO-PROF
+    profLog("buffer size=%llu: gpu=%.1fms write=%.1fms (%.0f MB/s)",
+            static_cast<unsigned long long>(bufferInfo->size), profGpuMs, profWriteMs,
+            profWriteMs > 0.0
+                ? static_cast<double>(bufferInfo->size) / (profWriteMs * 1024.0)
+                : 0.0);
     return true;
 }
 
