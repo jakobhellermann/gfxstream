@@ -389,8 +389,6 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     if (!getFormatTransferInfo(imageCreateInfo.format, imageCreateInfo.extent, &transferInfo)) {
         return true;
     }
-    VkDeviceSize stagingBufferSize = transferInfo.stagingBufferCopySize;
-
     VkCommandBuffer commandBuffer = staging->commandBuffer;
     VkFence fence = staging->fence;
 
@@ -440,47 +438,73 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         return true;
     }
     // TODO(b/323064243): previously a staging buffer was allocated per image;
-    // reuse the shared per-device staging context instead.
-    if (!ensureSnapshotStagingCapacity(stateBlock, staging, stagingBufferSize)) {
+    // reuse the shared per-device staging context instead. All (mip level,
+    // array layer) regions are staged with one read pass and uploaded with a
+    // single command buffer + submit (previously one submit per region).
+    // Region bases mirror the save path: 16-byte aligned, only shifting the
+    // base so plane-relative buffer offsets are preserved.
+    constexpr VkDeviceSize kRegionAlignment = 16;
+    const uint32_t mipLevels = imageInfo->imageCreateInfoShallow.mipLevels;
+    const uint32_t arrayLayers = imageInfo->imageCreateInfoShallow.arrayLayers;
+    std::vector<VkDeviceSize> regionSizes;
+    std::vector<TransferInfo> regionTransferInfos;
+    VkDeviceSize stagingNeeded = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        VkExtent3D mipmapExtent = getMipmapExtent(imageCreateInfo.extent, mipLevel);
+        TransferInfo mipmapTransferInfo;
+        if (!getFormatTransferInfo(imageCreateInfo.format, mipmapExtent, &mipmapTransferInfo)) {
+            GFXSTREAM_ERROR("Failed to get transfer info for snapshot load");
+            return false;
+        }
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
+            regionSizes.push_back(mipmapTransferInfo.stagingBufferCopySize);
+            regionTransferInfos.push_back(mipmapTransferInfo);
+            stagingNeeded = (stagingNeeded + mipmapTransferInfo.stagingBufferCopySize +
+                             kRegionAlignment - 1) &
+                            ~(kRegionAlignment - 1);
+        }
+    }
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging, stagingNeeded)) {
         return false;
     }
-    void* mapped = staging->mapped;
 
     // VALO-PROF
-    double profGpuMs = 0.0;
     double profReadMs = 0.0;
     uint64_t profReadBytes = 0;
-    for (uint32_t mipLevel = 0; mipLevel < imageInfo->imageCreateInfoShallow.mipLevels;
-         mipLevel++) {
-        for (uint32_t arrayLayer = 0; arrayLayer < imageInfo->imageCreateInfoShallow.arrayLayers;
-             arrayLayer++) {
-            // TODO(b/323064243): reuse command buffers
-            VkCommandBufferBeginInfo beginInfo{
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            };
-            if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-                GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
-                return false;
-            }
-
-            VkExtent3D mipmapExtent = getMipmapExtent(imageCreateInfo.extent, mipLevel);
-            if (!getFormatTransferInfo(imageCreateInfo.format, mipmapExtent, &transferInfo)) {
-                GFXSTREAM_ERROR("Failed to get transfer info for snapshot load");
-                return false;
-            }
-
+    VkDeviceSize regionBase = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
             // Require the serialized size to match the expected per-mip transfer size.
             size_t bytes = stream->getBe64();
-            if (bytes != transferInfo.stagingBufferCopySize) {
+            if (bytes != regionSizes[mipLevel * arrayLayers + arrayLayer]) {
                 GFXSTREAM_FATAL("Unexpected image content size on snapshot load");
             }
             const auto profR0 = std::chrono::steady_clock::now();
-            stream->read(mapped, bytes);
-            const double profReadRegionMs =
+            stream->read(static_cast<char*>(staging->mapped) + regionBase, bytes);
+            profReadMs +=
                 std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - profR0)
                     .count();
-            std::vector<VkBufferImageCopy>& bufferImageCopies = transferInfo.bufferImageCopies;
+            profReadBytes += bytes;
+            regionBase = (regionBase + bytes + kRegionAlignment - 1) & ~(kRegionAlignment - 1);
+        }
+    }
+
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+        GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
+        return false;
+    }
+
+    regionBase = 0;
+    for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
+        for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
+            TransferInfo& mipmapTransferInfo =
+                regionTransferInfos[mipLevel * arrayLayers + arrayLayer];
+            std::vector<VkBufferImageCopy>& bufferImageCopies =
+                mipmapTransferInfo.bufferImageCopies;
             VkImageAspectFlags aspects = 0;
             for (const auto& copy : bufferImageCopies) {
                 aspects |= copy.imageSubresource.aspectMask;
@@ -508,6 +532,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             for (auto& region : bufferImageCopies) {
                 region.imageSubresource.mipLevel = mipLevel;
                 region.imageSubresource.baseArrayLayer = arrayLayer;
+                region.bufferOffset += regionBase;
                 dispatch->vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image,
                                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
             }
@@ -522,34 +547,34 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                                                nullptr, 1, &imgMemoryBarrier);
             }
-            VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-
-            // Execute the command to copy image
-            VkSubmitInfo submitInfo = {
-                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                .commandBufferCount = 1,
-                .pCommandBuffers = &commandBuffer,
-            };
-            const auto profSubT0 = std::chrono::steady_clock::now();
-            VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-            VK_CHECK(
-                dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
-            VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
-            profGpuMs +=
-                std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - profSubT0)
-                    .count();
-            profReadMs += profReadRegionMs;
-            profReadBytes += bytes;
+            regionBase =
+                (regionBase + regionSizes[mipLevel * arrayLayers + arrayLayer] +
+                 kRegionAlignment - 1) &
+                ~(kRegionAlignment - 1);
         }
     }
+    VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
+
+    // Execute the command to upload all regions of this image with a single submit.
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+    };
+    const auto profSubT0 = std::chrono::steady_clock::now();
+    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
+    VK_CHECK(
+        dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
+    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
+    const double profGpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profSubT0)
+            .count();
     // VALO-PROF
     profLog(
         "load image fmt=%u %ux%ux%u mips=%u layers=%u: gpu=%.1fms read=%.1fms bytes=%llu "
         "(%.0f MB/s)",
         imageCreateInfo.format, imageCreateInfo.extent.width, imageCreateInfo.extent.height,
-        imageCreateInfo.extent.depth, imageInfo->imageCreateInfoShallow.mipLevels,
-        imageInfo->imageCreateInfoShallow.arrayLayers, profGpuMs, profReadMs,
+        imageCreateInfo.extent.depth, mipLevels, arrayLayers, profGpuMs, profReadMs,
         static_cast<unsigned long long>(profReadBytes),
         profReadMs > 0.0 ? static_cast<double>(profReadBytes) / (profReadMs * 1024.0) : 0.0);
     return true;
