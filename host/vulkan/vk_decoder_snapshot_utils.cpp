@@ -167,7 +167,7 @@ bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContex
     VkBufferCreateInfo bufferCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = needed,
-        .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     VK_CHECK(
@@ -374,7 +374,8 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     return true;
 }
 
-bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage image,
+bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo) {
     const bool validImage = (stream->getBe32() == kGoodImageSnapshot);
     if (!validImage) {
@@ -390,20 +391,9 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
     }
     VkDeviceSize stagingBufferSize = transferInfo.stagingBufferCopySize;
 
-    VkCommandBufferAllocateInfo allocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = stateBlock->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    VkCommandBuffer commandBuffer;
-    VK_CHECK(dispatch->vkAllocateCommandBuffers(stateBlock->device, &allocInfo,
-                                                      &commandBuffer));
-    VkFenceCreateInfo fenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(dispatch->vkCreateFence(stateBlock->device, &fenceCreateInfo, nullptr, &fence));
+    VkCommandBuffer commandBuffer = staging->commandBuffer;
+    VkFence fence = staging->fence;
+
     if (imageInfo->imageCreateInfoShallow.samples != VK_SAMPLE_COUNT_1_BIT) {
         // Set the layout and quit
         // TODO: resolve and save image content
@@ -447,49 +437,19 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
         VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
         VK_CHECK(
             dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
-        dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
-        dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1,
-                                       &commandBuffer);
         return true;
     }
-    VkBufferCreateInfo bufferCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = stagingBufferSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    VkBuffer stagingBuffer;
-    VK_CHECK(
-        dispatch->vkCreateBuffer(stateBlock->device, &bufferCreateInfo, nullptr, &stagingBuffer));
-
-    VkMemoryRequirements stagingBufferMemoryRequirements{};
-    dispatch->vkGetBufferMemoryRequirements(stateBlock->device, stagingBuffer,
-                                            &stagingBufferMemoryRequirements);
-
-    const auto stagingBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, stagingBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    // Staging memory
-    // TODO(b/323064243): reuse staging memory
-    VkMemoryAllocateInfo stagingBufferMemoryAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = stagingBufferMemoryRequirements.size,
-        .memoryTypeIndex = stagingBufferMemoryType,
-    };
-    VkDeviceMemory stagingMemory;
-    VK_CHECK(dispatch->vkAllocateMemory(stateBlock->device, &stagingBufferMemoryAllocateInfo,
-                                              nullptr, &stagingMemory));
-    VK_CHECK(
-        dispatch->vkBindBufferMemory(stateBlock->device, stagingBuffer, stagingMemory, 0));
-
-    void* mapped = nullptr;
-    if (dispatch->vkMapMemory(stateBlock->device, stagingMemory, 0, VK_WHOLE_SIZE,
-                                         VkMemoryMapFlags{}, &mapped) != VK_SUCCESS || mapped == nullptr) {
-        GFXSTREAM_ERROR("Failed to map memory for image snapshot load");
+    // TODO(b/323064243): previously a staging buffer was allocated per image;
+    // reuse the shared per-device staging context instead.
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging, stagingBufferSize)) {
         return false;
     }
+    void* mapped = staging->mapped;
 
+    // VALO-PROF
+    double profGpuMs = 0.0;
+    double profReadMs = 0.0;
+    uint64_t profReadBytes = 0;
     for (uint32_t mipLevel = 0; mipLevel < imageInfo->imageCreateInfoShallow.mipLevels;
          mipLevel++) {
         for (uint32_t arrayLayer = 0; arrayLayer < imageInfo->imageCreateInfoShallow.arrayLayers;
@@ -514,7 +474,12 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
             if (bytes != transferInfo.stagingBufferCopySize) {
                 GFXSTREAM_FATAL("Unexpected image content size on snapshot load");
             }
+            const auto profR0 = std::chrono::steady_clock::now();
             stream->read(mapped, bytes);
+            const double profReadRegionMs =
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - profR0)
+                    .count();
             std::vector<VkBufferImageCopy>& bufferImageCopies = transferInfo.bufferImageCopies;
             VkImageAspectFlags aspects = 0;
             for (const auto& copy : bufferImageCopies) {
@@ -543,7 +508,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
             for (auto& region : bufferImageCopies) {
                 region.imageSubresource.mipLevel = mipLevel;
                 region.imageSubresource.baseArrayLayer = arrayLayer;
-                dispatch->vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, image,
+                dispatch->vkCmdCopyBufferToImage(commandBuffer, staging->buffer, image,
                                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
             }
 
@@ -565,17 +530,28 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
                 .commandBufferCount = 1,
                 .pCommandBuffers = &commandBuffer,
             };
+            const auto profSubT0 = std::chrono::steady_clock::now();
             VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
             VK_CHECK(
                 dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
             VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
+            profGpuMs +=
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - profSubT0)
+                    .count();
+            profReadMs += profReadRegionMs;
+            profReadBytes += bytes;
         }
     }
-    dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
-    dispatch->vkUnmapMemory(stateBlock->device, stagingMemory);
-    dispatch->vkDestroyBuffer(stateBlock->device, stagingBuffer, nullptr);
-    dispatch->vkFreeMemory(stateBlock->device, stagingMemory, nullptr);
-    dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1, &commandBuffer);
+    // VALO-PROF
+    profLog(
+        "load image fmt=%u %ux%ux%u mips=%u layers=%u: gpu=%.1fms read=%.1fms bytes=%llu "
+        "(%.0f MB/s)",
+        imageCreateInfo.format, imageCreateInfo.extent.width, imageCreateInfo.extent.height,
+        imageCreateInfo.extent.depth, imageInfo->imageCreateInfoShallow.mipLevels,
+        imageInfo->imageCreateInfoShallow.arrayLayers, profGpuMs, profReadMs,
+        static_cast<unsigned long long>(profReadBytes),
+        profReadMs > 0.0 ? static_cast<double>(profReadBytes) / (profReadMs * 1024.0) : 0.0);
     return true;
 }
 
@@ -714,70 +690,34 @@ void signalSemaphore(StateBlock* stateBlock, VkSemaphore unboxed_semaphore) {
     dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
 }
 
-bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuffer buffer,
-                       const BufferInfo* bufferInfo) {
+bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkBuffer buffer,
+                      const BufferInfo* bufferInfo) {
     VkBufferUsageFlags requiredUsages =
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     if ((bufferInfo->usage & requiredUsages) != requiredUsages) {
         return true;
     }
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
-    VkCommandBufferAllocateInfo allocInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = stateBlock->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    VkCommandBuffer commandBuffer;
-    VK_CHECK(dispatch->vkAllocateCommandBuffers(stateBlock->device, &allocInfo,
-                                                      &commandBuffer));
-    VkFenceCreateInfo fenceCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    VkFence fence;
-    VK_CHECK(dispatch->vkCreateFence(stateBlock->device, &fenceCreateInfo, nullptr, &fence));
-    VkBufferCreateInfo bufferCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = static_cast<VkDeviceSize>(bufferInfo->size),
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    VkBuffer stagingBuffer;
-    VK_CHECK(
-        dispatch->vkCreateBuffer(stateBlock->device, &bufferCreateInfo, nullptr, &stagingBuffer));
 
-    VkMemoryRequirements stagingBufferMemoryRequirements{};
-    dispatch->vkGetBufferMemoryRequirements(stateBlock->device, stagingBuffer,
-                                            &stagingBufferMemoryRequirements);
-
-    const auto stagingBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, stagingBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    // Staging memory
-    // TODO(b/323064243): reuse staging memory
-    VkMemoryAllocateInfo stagingBufferMemoryAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = stagingBufferMemoryRequirements.size,
-        .memoryTypeIndex = stagingBufferMemoryType,
-    };
-    VkDeviceMemory stagingMemory;
-    VK_CHECK(dispatch->vkAllocateMemory(stateBlock->device, &stagingBufferMemoryAllocateInfo,
-                                              nullptr, &stagingMemory));
-    VK_CHECK(
-        dispatch->vkBindBufferMemory(stateBlock->device, stagingBuffer, stagingMemory, 0));
-
-    void* mapped = nullptr;
-    if (dispatch->vkMapMemory(stateBlock->device, stagingMemory, 0, VK_WHOLE_SIZE,
-                                         VkMemoryMapFlags{}, &mapped) != VK_SUCCESS || mapped == nullptr) {
-        GFXSTREAM_ERROR("Failed to map memory for buffer snapshot load");
+    // TODO(b/323064243): previously a staging buffer, command buffer and
+    // fence were allocated per buffer; reuse the shared per-device context.
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging,
+                                       static_cast<VkDeviceSize>(bufferInfo->size))) {
         return false;
     }
+    VkCommandBuffer commandBuffer = staging->commandBuffer;
+
     size_t bufferSize = stream->getBe64();
     if (bufferSize != bufferInfo->size) {
         GFXSTREAM_ERROR("Failed to read buffer on snapshot load");
         return false;
     }
-    stream->read(mapped, bufferInfo->size);
+    const auto profR0 = std::chrono::steady_clock::now();
+    stream->read(staging->mapped, bufferInfo->size);
+    const double profReadMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profR0)
+            .count();
 
     VkBufferCopy bufferCopy = {
         .srcOffset = 0,
@@ -792,7 +732,7 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
         GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
         return false;
     }
-    dispatch->vkCmdCopyBuffer(commandBuffer, stagingBuffer, buffer, 1, &bufferCopy);
+    dispatch->vkCmdCopyBuffer(commandBuffer, staging->buffer, buffer, 1, &bufferCopy);
     VkBufferMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
                                   .pNext = nullptr,
                                   .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -813,15 +753,20 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    VK_CHECK(dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
-    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
-
-    dispatch->vkDestroyFence(stateBlock->device, fence, nullptr);
-    dispatch->vkUnmapMemory(stateBlock->device, stagingMemory);
-    dispatch->vkDestroyBuffer(stateBlock->device, stagingBuffer, nullptr);
-    dispatch->vkFreeMemory(stateBlock->device, stagingMemory, nullptr);
-    dispatch->vkFreeCommandBuffers(stateBlock->device, stateBlock->commandPool, 1, &commandBuffer);
+    // VALO-PROF
+    const auto profSubT0 = std::chrono::steady_clock::now();
+    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
+    VK_CHECK(dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE,
+                                        3000000000L));
+    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
+    const double profGpuMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - profSubT0)
+            .count();
+    profLog("load buffer size=%llu: gpu=%.1fms read=%.1fms (%.0f MB/s)",
+            static_cast<unsigned long long>(bufferInfo->size), profGpuMs, profReadMs,
+            profReadMs > 0.0
+                ? static_cast<double>(bufferInfo->size) / (profReadMs * 1024.0)
+                : 0.0);
     return true;
 }
 

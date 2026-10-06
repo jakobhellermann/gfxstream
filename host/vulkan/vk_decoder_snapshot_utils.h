@@ -49,7 +49,8 @@ bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContex
 bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                       SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo);
-bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage image,
+bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo);
 bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                        SnapshotStagingContext* staging, VkBuffer buffer,
@@ -59,8 +60,9 @@ void setEventInQueue(StateBlock* stateBlock, VkEvent event, uint64_t eventflags)
 
 void signalSemaphore(StateBlock* stateBlock, VkSemaphore unboxed_semaphore);
 
-bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuffer buffer,
-                       const BufferInfo* bufferInfo);
+bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkBuffer buffer,
+                      const BufferInfo* bufferInfo);
 }  // namespace vk
 }  // namespace host
 }  // namespace gfxstream
