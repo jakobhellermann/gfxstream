@@ -520,6 +520,26 @@ class VkDecoderSnapshot::Impl {
                         const uint8_t* apiCallPacket, size_t apiCallPacketSize, VkDevice device,
                         VkImage image, const VkAllocationCallbacks* pAllocator) {
         std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        // Destroying an image cascades its image view nodes out of the
+        // graph, dropping the views' creation ops from the replay window.
+        // Views whose owners are still alive then come back MISSING from
+        // restores: loadVkSnapshots drops their descriptor writes as stale
+        // (unbox of a handle whose creation op was not replayed), leaving
+        // the binding empty — glitchy visuals after every restore. A view
+        // node that still exists has not been destroyed (vkDestroyImageView
+        // removes its node), so any live view child means the image node
+        // must stay for the views' replay. The zombie node (and the extra
+        // host object each replay re-creates from it) is bounded by the
+        // number of live views and is never destroyed afterwards; the
+        // alternative is silently broken bindings.
+        for (uint64_t child : mReconstruction.getChildNodeIds((uint64_t)(uintptr_t)image)) {
+            if (((child >> 48) & 0xFF) == Tag_VkImageView) {
+                GFXSTREAM_DEBUG(
+                    "vkDestroyImage: keep image node, live view child 0x%llx",
+                    (unsigned long long)child);
+                return;
+            }
+        }
         // image destroy
         mReconstruction.removeHandles((const uint64_t*)(&image), 1, true);
     }
@@ -2878,6 +2898,18 @@ class VkDecoderSnapshot::Impl {
                                 size_t apiCallPacketSize, VkResult input_result, VkDevice device,
                                 VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator) {
         std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        // Cascade removal here would also drop bound images and their views
+        // from the replay window while those objects are still alive (their
+        // owners have not destroyed them), which restores would then render
+        // with missing bindings. Keep the node as a zombie instead.
+        for (uint64_t child : mReconstruction.getChildNodeIds((uint64_t)(uintptr_t)memory)) {
+            if (((child >> 48) & 0xFF) == Tag_VkImage) {
+                GFXSTREAM_DEBUG(
+                    "vkFreeMemory: keep memory node, live image child 0x%llx",
+                    (unsigned long long)child);
+                return;
+            }
+        }
         // memory destroy
         mReconstruction.removeHandles((const uint64_t*)(&memory), 1, true);
     }
