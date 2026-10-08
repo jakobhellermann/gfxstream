@@ -305,6 +305,12 @@ void VkReconstruction::addHandles(const uint64_t* toAdd, uint32_t count) {
     mGraph.addNodes(toAdd, count);
 }
 
+std::vector<uint64_t> VkReconstruction::getChildNodeIds(uint64_t parentId) {
+    auto* node = mGraph.getDepNode(parentId);
+    if (!node) return {};
+    return {node->childNodeIds.begin(), node->childNodeIds.end()};
+}
+
 void VkReconstruction::removeHandles(const uint64_t* toRemove, uint32_t count, bool recursive) {
     if (!toRemove) return;
 

@@ -66,6 +66,11 @@ class VkReconstruction {
     void addHandles(const uint64_t* toAdd, uint32_t count);
     void removeHandles(const uint64_t* toRemove, uint32_t count, bool recursive = true);
 
+    // Child node ids of a live handle node (empty if the node is gone).
+    // Used by the snapshot layer to decide cascade removals: destroying an
+    // object must not cascade-remove handles whose owners are still alive.
+    std::vector<uint64_t> getChildNodeIds(uint64_t parentId);
+
     void removeGrandChildren(const uint64_t handle);
     void removeDescendantsOfHandle(const uint64_t handle);
 
