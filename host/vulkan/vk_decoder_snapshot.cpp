@@ -2968,6 +2968,18 @@ class VkDecoderSnapshot::Impl {
         mReconstruction.setCreatedHandlesForApi(apiCallHandle, (const uint64_t*)(&handle), 1);
         mReconstruction.setApiTrace(apiCallHandle, apiCallPacket, apiCallPacketSize);
     }
+    // Deliberately NOT registered with the reconstruction graph (same
+    // policy as vkUpdateDescriptorSets below):
+    //
+    // Descriptor set content is restored by the snapshot descriptor
+    // section, which serializes the accumulated writes (alives-filtered)
+    // for every host-backed set; replaying the historical update packets
+    // adds nothing. Retaining them is actively harmful: the raw packet
+    // embeds the referenced view/buffer handles as of update time, and
+    // the retained node previously only depended on the device, so the
+    // op outlived every object it referenced. One destroyed image view
+    // then made every subsequent restore fatally unbox the stale handle
+    // during the replay decode and abort the whole process.
     void vkUpdateDescriptorSetWithTemplateSized2GOOGLE(
         gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
         const uint8_t* apiCallPacket, size_t apiCallPacketSize, VkDevice device,
@@ -2976,21 +2988,7 @@ class VkDecoderSnapshot::Impl {
         uint32_t inlineUniformBlockCount, const uint32_t* pImageInfoEntryIndices,
         const uint32_t* pBufferInfoEntryIndices, const uint32_t* pBufferViewEntryIndices,
         const VkDescriptorImageInfo* pImageInfos, const VkDescriptorBufferInfo* pBufferInfos,
-        const VkBufferView* pBufferViews, const uint8_t* pInlineUniformBlockData) {
-        std::lock_guard<std::mutex> lock(mReconstructionMutex);
-        VkDecoderGlobalState* m_state = VkDecoderGlobalState::get();
-        if (m_state->batchedDescriptorSetUpdateEnabled()) {
-            return;
-        }
-        uint64_t handle = m_state->newGlobalVkGenericHandle(Tag_VkUpdateDescriptorSets);
-        mReconstruction.addHandles((const uint64_t*)(&handle), 1);
-        mReconstruction.setApiTrace(apiCallHandle, apiCallPacket, apiCallPacketSize);
-        mReconstruction.addHandleDependency((const uint64_t*)(&handle), 1,
-                                            (uint64_t)(uintptr_t)device);
-        mReconstruction.forEachHandleAddApi((const uint64_t*)(&handle), 1, apiCallHandle,
-                                            VkReconstruction::CREATED);
-        mReconstruction.setCreatedHandlesForApi(apiCallHandle, (const uint64_t*)(&handle), 1);
-    }
+        const VkBufferView* pBufferViews, const uint8_t* pInlineUniformBlockData) {}
     void vkQueueSubmitAsync2GOOGLE(gfxstream::base::BumpPool* pool,
                                    VkSnapshotApiCallHandle apiCallHandle,
                                    const uint8_t* apiCallPacket, size_t apiCallPacketSize,
