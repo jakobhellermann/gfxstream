@@ -1243,6 +1243,7 @@ class VkDecoderGlobalState::Impl {
                             .descriptorType = descriptorType,
                         };
                         bool staleWrite = false;
+                        uint64_t staleTarget = 0;
                         switch (writeType) {
                             case DescriptorSetInfo::DescriptorWriteType::ImageInfo: {
                                 tmpImageInfos.push_back(std::make_unique<VkDescriptorImageInfo>());
@@ -1253,6 +1254,7 @@ class VkDecoderGlobalState::Impl {
                                     const VkImageView boxed = imageInfo.imageView;
                                     imageInfo.imageView = try_unbox_VkImageView(boxed);
                                     staleWrite |= boxed && !imageInfo.imageView;
+                                    if (boxed && !imageInfo.imageView) staleTarget = (uint64_t)(uintptr_t)boxed;
                                 } else {
                                     imageInfo.imageView = 0;
                                 }
@@ -1273,6 +1275,7 @@ class VkDecoderGlobalState::Impl {
                                 const VkBuffer boxed = bufferInfo.buffer;
                                 bufferInfo.buffer = try_unbox_VkBuffer(boxed);
                                 staleWrite |= boxed && !bufferInfo.buffer;
+                                if (boxed && !bufferInfo.buffer) staleTarget = (uint64_t)(uintptr_t)boxed;
                             } break;
                             case DescriptorSetInfo::DescriptorWriteType::BufferView: {
                                 tmpBufferViews.push_back(std::make_unique<VkBufferView>());
@@ -1282,6 +1285,7 @@ class VkDecoderGlobalState::Impl {
                                 const VkBufferView boxed = bufferView;
                                 bufferView = try_unbox_VkBufferView(boxed);
                                 staleWrite |= boxed && !bufferView;
+                                if (boxed && !bufferView) staleTarget = (uint64_t)(uintptr_t)boxed;
                             } break;
                             case DescriptorSetInfo::DescriptorWriteType::InlineUniformBlock: {
                                 uint32_t dataSize = stream->getBe32();
@@ -1324,8 +1328,9 @@ class VkDecoderGlobalState::Impl {
                         if (staleWrite) {
                             GFXSTREAM_WARNING(
                                 "snapshot load: skip stale descriptor write set=0x%llx binding=%u "
-                                "element=%u",
-                                (unsigned long long)poolId, binding, arrayElement);
+                                "element=%u target=0x%llx",
+                                (unsigned long long)poolId, binding, arrayElement,
+                                (unsigned long long)staleTarget);
                         } else {
                             writeDescriptorSets.push_back(writeDescriptorSet);
                         }

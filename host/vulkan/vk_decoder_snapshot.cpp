@@ -2914,6 +2914,20 @@ class VkDecoderSnapshot::Impl {
                                     const uint8_t* apiCallPacket, size_t apiCallPacketSize,
                                     VkQueue queue, VkCommandBuffer commandBuffer,
                                     VkDeviceSize dataSize, const void* pData) {}
+    // Deliberately NOT registered with the reconstruction graph:
+    //
+    // Registering this op would retain its RAW packet in the replay
+    // window, and the packet carries the historical pending writes
+    // unfiltered. Their target handles (views, buffers) may no longer
+    // exist in the replayed state, and the auto-generated stream unbox of
+    // the embedded VkWriteDescriptorSet image infos is FATAL on missing
+    // handles — one stale descriptor write would abort the whole restore.
+    //
+    // Descriptor state does not need this op in the window either: the
+    // snapshot descriptor section serializes every host-backed set (with
+    // writes, alives-filtered), and the load path re-allocates and
+    // re-applies it. Sets whose writes reference objects that are gone
+    // are skipped there (see the staleWrite handling in loadVkSnapshots).
     void vkQueueCommitDescriptorSetUpdatesGOOGLE(
         gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
         const uint8_t* apiCallPacket, size_t apiCallPacketSize, VkQueue queue,
