@@ -141,6 +141,13 @@ class ExternalObjectManager {
                                uint32_t streamHandleType);
     std::optional<SyncDescriptorInfo> removeSyncDescriptorInfo(uint32_t ctx_id, uint64_t syncId);
 
+    // Drops every registered blob descriptor and blob mapping. The VMM
+    // calls this at the start of a restore, before re-attaching the
+    // descriptors and mappings of the restore point, so registrations from
+    // diverged timelines cannot be consumed by the restore replay. Sync
+    // descriptors are not blob state and are left alone.
+    void clearBlobObjects();
+
    private:
     // Only for pairs of std::hash-able types for simplicity.
     // You can of course template this struct to allow other hash functions

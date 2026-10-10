@@ -505,6 +505,10 @@ VG_EXPORT void stream_renderer_reattach_blob_descriptor(uint32_t ctx_id, uint64_
         ctx_id, blob_id, std::move(descriptor), stream_handle_type, 0, std::nullopt);
 }
 
+VG_EXPORT void stream_renderer_clear_external_blob_objects() {
+    gfxstream::host::ExternalObjectManager::get()->clearBlobObjects();
+}
+
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut) {
     GFXSTREAM_TRACE_EVENT(GFXSTREAM_TRACE_STREAM_RENDERER_CATEGORY,
                           "stream_renderer_resource_map()");
