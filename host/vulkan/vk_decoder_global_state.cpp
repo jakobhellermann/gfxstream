@@ -1215,6 +1215,9 @@ class VkDecoderGlobalState::Impl {
                 std::vector<VkWriteDescriptorSet> writeDescriptorSets;
                 std::vector<uint32_t> writeStartingIndices;
 
+                const auto& device = poolInfo.device;
+                const auto& deviceInfo = gfxstream::base::find(mDeviceInfo, device);
+
                 auto allpoolIds = poolInfo.poolIds;
                 if (!m_vkEmulation->getFeatures().VulkanBatchedDescriptorSetUpdate.enabled()) {
                     allpoolIds.clear();
@@ -1342,13 +1345,29 @@ class VkDecoderGlobalState::Impl {
                         }
                         // TODO(ai-review): generated, not yet audited
                         // A live descriptor set may retain an obsolete write
-                        // after the referenced resource was destroyed.
+                        // after the referenced resource was destroyed. The
+                        // failed unboxes above left those targets as
+                        // VK_NULL_HANDLE: with nullDescriptor enabled the
+                        // write still applies, giving the slot the defined
+                        // reads-zero behavior of a null descriptor instead of
+                        // never-written pool memory that draws decode into
+                        // garbage descriptors (GPUVM faults). Without the
+                        // feature, the slot stays empty as before.
                         if (staleWrite) {
-                            GFXSTREAM_WARNING(
-                                "snapshot load: skip stale descriptor write set=0x%llx binding=%u "
-                                "element=%u target=0x%llx",
-                                (unsigned long long)poolId, binding, arrayElement,
-                                (unsigned long long)staleTarget);
+                            if (deviceInfo && deviceInfo->nullDescriptorEnabled) {
+                                GFXSTREAM_WARNING(
+                                    "snapshot load: apply stale descriptor write set=0x%llx "
+                                    "binding=%u element=%u target=0x%llx as null descriptor",
+                                    (unsigned long long)poolId, binding, arrayElement,
+                                    (unsigned long long)staleTarget);
+                                writeDescriptorSets.push_back(writeDescriptorSet);
+                            } else {
+                                GFXSTREAM_WARNING(
+                                    "snapshot load: skip stale descriptor write set=0x%llx binding=%u "
+                                    "element=%u target=0x%llx",
+                                    (unsigned long long)poolId, binding, arrayElement,
+                                    (unsigned long long)staleTarget);
+                            }
                         } else {
                             writeDescriptorSets.push_back(writeDescriptorSet);
                         }
@@ -1359,8 +1378,6 @@ class VkDecoderGlobalState::Impl {
                 // all the descriptors are already allocated
                 std::vector<uint32_t> pendingAlloc(poolIds.size(), false);
 
-                const auto& device = poolInfo.device;
-                const auto& deviceInfo = gfxstream::base::find(mDeviceInfo, device);
                 VulkanDispatch* dvk = dispatch_VkDevice(deviceInfo->boxed);
                 on_vkQueueCommitDescriptorSetUpdatesGOOGLELocked(
                     &bumpPool, kInvalidSnapshotApiCallHandle, dvk, device, 1,
@@ -2545,6 +2562,61 @@ class VkDecoderGlobalState::Impl {
             createInfoFiltered.pNext = &modifiedRobustness2features;
         }
 
+        // Snapshot restores bind null handles into descriptor slots whose
+        // serialized target could not be recreated (its creation op left the
+        // replay window - the staleWrite handling in loadVkSnapshots).
+        // nullDescriptor makes those slots defined reads-zero instead of
+        // never-written pool memory, so force-enable just that feature when
+        // the physical device supports it, independent of the guest request.
+        // Unlike the force-enable above, the potentially slower
+        // robustBufferAccess2/robustImageAccess2 stay unrequested.
+        bool nullDescriptorEnabled = forceEnableRobustness;
+        // Runtime kill switch for A/B runs: ANDROID_GFXSTREAM_DISABLE_NULL_DESCRIPTOR=1
+        // leaves the device without the feature and the snapshot load falls back
+        // to skipping stale descriptor writes.
+        const bool nullDescriptorDisabled =
+            gfxstream::base::getEnvironmentVariable(
+                "ANDROID_GFXSTREAM_DISABLE_NULL_DESCRIPTOR") == "1";
+        VkPhysicalDeviceRobustness2FeaturesEXT forceEnableNullDescriptor = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+            .nullDescriptor = VK_TRUE,
+        };
+        if (!forceEnableRobustness && !nullDescriptorDisabled) {
+            std::vector<VkExtensionProperties> hostDeviceExtensions;
+            if (enumerateDeviceExtensionProperties(vk, physicalDevice, nullptr,
+                                                  hostDeviceExtensions) == VK_SUCCESS) {
+                for (const auto& extension : hostDeviceExtensions) {
+                    if (strcmp(extension.extensionName, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME) != 0) {
+                        continue;
+                    }
+                    VkPhysicalDeviceRobustness2FeaturesEXT supportedRobustness2 = {
+                        .sType =
+                            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+                    };
+                    VkPhysicalDeviceFeatures2 supportedFeatures2 = {
+                        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                        .pNext = &supportedRobustness2,
+                    };
+                    vk->vkGetPhysicalDeviceFeatures2(physicalDevice, &supportedFeatures2);
+                    if (supportedRobustness2.nullDescriptor != VK_TRUE) {
+                        break;
+                    }
+                    auto* requestedRobustness2 = vk_find_struct<
+                        VkPhysicalDeviceRobustness2FeaturesEXT>(&createInfoFiltered);
+                    if (requestedRobustness2 != nullptr) {
+                        requestedRobustness2->nullDescriptor = VK_TRUE;
+                    } else {
+                        updatedDeviceExtensions.push_back(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+                        forceEnableNullDescriptor.pNext =
+                            const_cast<void*>(createInfoFiltered.pNext);
+                        createInfoFiltered.pNext = &forceEnableNullDescriptor;
+                    }
+                    nullDescriptorEnabled = true;
+                    break;
+                }
+            }
+        }
+
         if (VkPhysicalDeviceFeatures2* features2 =
                 vk_find_struct<VkPhysicalDeviceFeatures2>(&createInfoFiltered)) {
             featuresToFilter.emplace_back(&features2->features);
@@ -2791,6 +2863,7 @@ class VkDecoderGlobalState::Impl {
         deviceInfo.emulateTextureEtc2 = emulateTextureEtc2;
         deviceInfo.emulateTextureAstc = emulateTextureAstc;
         deviceInfo.emulateProtectedMemory = emulateProtectedMemory;
+        deviceInfo.nullDescriptorEnabled = nullDescriptorEnabled;
         deviceInfo.useAstcCpuDecompression =
             m_vkEmulation->getAstcLdrEmulationMode() == AstcEmulationMode::Cpu &&
             AstcCpuDecompressor::get().available();

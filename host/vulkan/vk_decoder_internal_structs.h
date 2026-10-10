@@ -242,6 +242,12 @@ struct DeviceInfo {
     bool emulateTextureAstc = false;
     bool useAstcCpuDecompression = false;
     bool emulateProtectedMemory = false;
+    // Whether the device was created with VK_EXT_robustness2 nullDescriptor
+    // enabled. Snapshot restores bind null handles into descriptor slots
+    // whose serialized target could not be recreated (its creation op left
+    // the replay window), so the restored slot reads defined zeros instead
+    // of never-written pool memory.
+    bool nullDescriptorEnabled = false;
 
     ExternalFenceInfo externalFenceInfo;
     VkPhysicalDevice physicalDevice;
