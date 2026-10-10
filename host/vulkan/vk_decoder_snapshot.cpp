@@ -114,6 +114,11 @@ class VkDecoderSnapshot::Impl {
                                                                    boxedHandlesCount);
     }
 
+    bool hasDepNode(uint64_t id) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        return mReconstruction.hasDepNode(id);
+    }
+
 #ifdef VK_BASE_VERSION_1_0
     void vkCreateInstance(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
                           const uint8_t* apiCallPacket, size_t apiCallPacketSize,
@@ -540,6 +545,20 @@ class VkDecoderSnapshot::Impl {
         // unbox in the load's image section — observed with vkcube).
         // Destroying the node (the original behavior) is what makes
         // handle recycling work at all.
+        // P1 diagnostics: log which view nodes ride along with the image
+        // destroy — the views may still be alive (bound in descriptor sets),
+        // and their nodes' removal is what drops their creation ops from
+        // the replay window. Correlates with the save-side "creation op
+        // left the replay window" lines.
+        for (const auto childId : mReconstruction.getChildNodeIds((uint64_t)(uintptr_t)image)) {
+            if (((childId >> 48) & 0xFF) == (uint64_t)Tag_VkImageView) {
+                GFXSTREAM_INFO(
+                    "reconstruction: vkDestroyImage 0x%llx cascades live-or-dead view node "
+                    "0x%llx out of the replay window",
+                    (unsigned long long)(uint64_t)(uintptr_t)image,
+                    (unsigned long long)childId);
+            }
+        }
         // image destroy
         mReconstruction.removeHandles((const uint64_t*)(&image), 1, true);
     }
@@ -3084,6 +3103,10 @@ void VkDecoderSnapshot::addOrderedBoxedHandlesCreatedByCall(VkSnapshotApiCallHan
                                                             VkObjectHandle* boxedHandles,
                                                             uint32_t boxedHandlesCount) {
     mImpl->addOrderedBoxedHandlesCreatedByCall(apiCallHandle, boxedHandles, boxedHandlesCount);
+}
+
+bool VkDecoderSnapshot::hasDepNode(uint64_t id) {
+    return mImpl->hasDepNode(id);
 }
 
 VkDecoderSnapshot::~VkDecoderSnapshot() = default;

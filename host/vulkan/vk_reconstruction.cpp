@@ -311,6 +311,10 @@ std::vector<uint64_t> VkReconstruction::getChildNodeIds(uint64_t parentId) {
     return {node->childNodeIds.begin(), node->childNodeIds.end()};
 }
 
+bool VkReconstruction::hasDepNode(uint64_t id) {
+    return mGraph.getDepNode(id) != nullptr;
+}
+
 void VkReconstruction::removeHandles(const uint64_t* toRemove, uint32_t count, bool recursive) {
     if (!toRemove) return;
 

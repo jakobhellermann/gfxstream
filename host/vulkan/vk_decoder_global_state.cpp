@@ -828,6 +828,24 @@ class VkDecoderGlobalState::Impl {
                                     ? unboxed_to_boxed_non_dispatchable_VkImageView(
                                           imageInfo.imageView)
                                     : VK_NULL_HANDLE;
+                            // A write that passes the alives filter can still be
+                            // un-restorable: destroy cascades remove graph
+                            // nodes of objects that are alive (a vkDestroyImage
+                            // takes its views' nodes with it), so the view's
+                            // creation op left the replay window and the load
+                            // drops this write as stale. Log the loss at the
+                            // source — these are the writes that come back as
+                            // "skip stale descriptor write" with empty
+                            // bindings after restores.
+                            if (imageInfo.imageView != VK_NULL_HANDLE &&
+                                !mSnapshot.hasDepNode((uint64_t)imageInfo.imageView)) {
+                                GFXSTREAM_INFO(
+                                    "snapshot save: descriptor write set=0x%llx binding=%d "
+                                    "element=%d targets view 0x%llx whose creation op left the "
+                                    "replay window — the load will skip this write",
+                                    (unsigned long long)poolId, idx.first, idx.second,
+                                    (unsigned long long)(uint64_t)imageInfo.imageView);
+                            }
                             imageInfo.sampler =
                                 descriptorTypeContainsSampler(entry.descriptorType)
                                     ? unboxed_to_boxed_non_dispatchable_VkSampler(imageInfo.sampler)
