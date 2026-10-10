@@ -91,6 +91,12 @@ class VkDecoderSnapshot {
     void addOrderedBoxedHandlesCreatedByCall(VkSnapshotApiCallHandle apiCallHandle,
                                              VkObjectHandle* boxedHandles,
                                              uint32_t boxedHandlesCount);
+
+    // Whether the replay graph still holds a node for the boxed handle.
+    // Save-side diagnostics: a serialized descriptor write whose target
+    // has no node will be skipped by the load (its creation op left the
+    // replay window via a destroy cascade while the object was alive).
+    bool hasDepNode(uint64_t id);
 #ifdef VK_BASE_VERSION_1_0
     void vkCreateInstance(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
                           const uint8_t* apiCallPacket, size_t apiCallPacketSize,

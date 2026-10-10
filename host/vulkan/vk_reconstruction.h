@@ -71,6 +71,11 @@ class VkReconstruction {
     // object must not cascade-remove handles whose owners are still alive.
     std::vector<uint64_t> getChildNodeIds(uint64_t parentId);
 
+    // Whether the replay graph still has a node for `id`. Used by the
+    // save-side diagnostics to notice serialized writes whose target lost
+    // its creation op (removed by a destroy cascade while still alive).
+    bool hasDepNode(uint64_t id);
+
     void removeGrandChildren(const uint64_t handle);
     void removeDescendantsOfHandle(const uint64_t handle);
 
