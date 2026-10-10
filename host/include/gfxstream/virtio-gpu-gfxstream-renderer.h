@@ -246,6 +246,11 @@ VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t b
 VG_EXPORT void stream_renderer_reattach_blob_descriptor(uint32_t ctx_id, uint64_t blob_id,
                                                         int fd, uint32_t stream_handle_type);
 
+// Drops every registered blob descriptor and blob mapping, so a restore
+// starts from an empty external object manager and the VMM's re-attached
+// registrations are the only ones the restore replay can consume.
+VG_EXPORT void stream_renderer_clear_external_blob_objects(void);
+
 VG_EXPORT int stream_renderer_resource_map(uint32_t res_handle, void** hvaOut, uint64_t* sizeOut);
 VG_EXPORT int stream_renderer_resource_unmap(uint32_t res_handle);
 

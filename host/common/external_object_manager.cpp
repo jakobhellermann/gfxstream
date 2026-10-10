@@ -115,5 +115,11 @@ std::optional<SyncDescriptorInfo> ExternalObjectManager::removeSyncDescriptorInf
     return std::nullopt;
 }
 
+void ExternalObjectManager::clearBlobObjects() {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mHostMemInfos.clear();
+    mBlobDescriptorInfos.clear();
+}
+
 }  // namespace host
 }  // namespace gfxstream
