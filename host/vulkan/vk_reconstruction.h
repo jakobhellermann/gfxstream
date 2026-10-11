@@ -47,7 +47,9 @@ class VkReconstruction {
                                   std::vector<uint64_t>* outSubCmdBuffer,
                                   std::vector<uint8_t>* outSubPacketBuffer,
                                   std::vector<uint32_t>* outSubDependencyCounts,
-                                  std::vector<uint64_t>* outSubDependencies);
+                                  std::vector<uint64_t>* outSubDependencies,
+                                  std::vector<uint64_t>* outDroppedCmdBuffers,
+                                  std::vector<uint64_t>* outDroppedDependencies);
 
     enum HandleState { CREATED = 0 };
 
@@ -164,6 +166,9 @@ class VkReconstruction {
         // Book-keeping for which handles were created by this API
         std::vector<uint64_t> createdHandles;
         std::vector<uint64_t> depends;
+        // Creation timestamp of each `depends` node when the dependency was
+        // recorded (0: not in the graph then); detects recycled handles.
+        std::vector<uint64_t> dependTimestamps;
 
         // Extra boxed handles created for this API call that are not identifiable
         // solely from the API parameters itself. For example, the extra boxed `VkQueue`s
@@ -186,6 +191,8 @@ class VkReconstruction {
     // addSubDecodeApiCall. Serialized after the graph-derived replay packets,
     // rewritten into main-stream format (dispatchable handle inserted).
     std::vector<std::pair<VkSnapshotApiCallHandle, uint64_t>> mSubDecodeApiCalls;
+
+    uint64_t depNodeTimestamp(uint64_t id);
 
     std::vector<uint8_t> mLoadedTrace;
 

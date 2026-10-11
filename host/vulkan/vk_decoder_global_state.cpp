@@ -949,6 +949,8 @@ class VkDecoderGlobalState::Impl {
         }
 
         std::vector<uint8_t> recordingReplayBuffer;
+        std::vector<uint64_t> droppedCmdBuffers;
+        std::vector<uint64_t> droppedDependencies;
 
         // Replay command stream:
         GFXSTREAM_DEBUG("snapshot load: replay command stream");
@@ -962,7 +964,8 @@ class VkDecoderGlobalState::Impl {
             VkDecoderSnapshot::loadReplayBuffers(stream, &handleReplayBuffer, &decoderReplayBuffer,
                                                  &recordingReplayBuffer,
                                                  &subCmdBuffer, &subPacketBuffer,
-                                                 &subDependencyCounts, &subDependencies);
+                                                 &subDependencyCounts, &subDependencies,
+                                                 &droppedCmdBuffers, &droppedDependencies);
             size_t dependencyTotal = 0;
             for (uint32_t count : subDependencyCounts) {
                 if (count > subDependencies.size() - dependencyTotal) {
@@ -1432,6 +1435,26 @@ class VkDecoderGlobalState::Impl {
                 GFXSTREAM_ERROR("Failed to completely decode snapshot recording buffer. Consumed %zu of %zu bytes",
                                 consumed, recordingReplayBuffer.size());
                 return false;
+            }
+        }
+        if (droppedCmdBuffers.size() != droppedDependencies.size()) {
+            GFXSTREAM_ERROR("snapshot load: dropped recording data is inconsistent");
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            for (size_t i = 0; i < droppedCmdBuffers.size(); ++i) {
+                const auto boxed = reinterpret_cast<VkCommandBuffer>(droppedCmdBuffers[i]);
+                CommandBufferInfo* info =
+                    gfxstream::base::find(mCommandBufferInfo, unbox_VkCommandBuffer(boxed));
+                if (!info) {
+                    GFXSTREAM_ERROR(
+                        "snapshot load: command buffer 0x%llx with a dropped recording does not "
+                        "exist after the replay",
+                        (unsigned long long)droppedCmdBuffers[i]);
+                    continue;
+                }
+                info->snapshotDroppedDependency = droppedDependencies[i];
             }
         }
         {
@@ -8177,9 +8200,29 @@ class VkDecoderGlobalState::Impl {
 
         vk->vkCmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers);
         std::lock_guard<std::mutex> lock(mMutex);
+        for (uint32_t i = 0; i < commandBufferCount; ++i) {
+            reportSnapshotDroppedRecordingLocked(pCommandBuffers[i], "executed as secondary");
+        }
         CommandBufferInfo& cmdBuffer = mCommandBufferInfo[commandBuffer];
         cmdBuffer.subCmds.insert(cmdBuffer.subCmds.end(), pCommandBuffers,
                                  pCommandBuffers + commandBufferCount);
+    }
+
+    // The snapshot dropped this buffer's recording (a dependency was destroyed
+    // before the save) and the guest uses it without re-recording: either the
+    // guest uses an invalid command buffer, or the drop was too conservative
+    // (e.g. UPDATE_AFTER_BIND descriptors do not invalidate). Reported once.
+    void reportSnapshotDroppedRecordingLocked(VkCommandBuffer commandBuffer, const char* use)
+        REQUIRES(mMutex) {
+        CommandBufferInfo* info = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
+        if (!info || !info->snapshotDroppedDependency) return;
+        GFXSTREAM_ERROR(
+            "command buffer 0x%llx %s after a restore without re-recording, but the snapshot "
+            "dropped its recording because dependency 0x%llx was destroyed before the save; "
+            "it executes empty",
+            (unsigned long long)(uintptr_t)info->boxed, use,
+            (unsigned long long)info->snapshotDroppedDependency);
+        info->snapshotDroppedDependency = 0;
     }
 
     // Check if all wait semaphores can be signalled
@@ -8407,6 +8450,13 @@ class VkDecoderGlobalState::Impl {
 
         {
             std::lock_guard<std::mutex> lock(mMutex);
+
+            for (uint32_t i = 0; i < submitCount; i++) {
+                for (int j = 0; j < getCommandBufferCount(pSubmits[i]); j++) {
+                    reportSnapshotDroppedRecordingLocked(getCommandBuffer(pSubmits[i], j),
+                                                         "submitted");
+                }
+            }
 
             if (!m_vkEmulation->getFeatures().GuestVulkanOnly.enabled()) {
                 for (uint32_t i = 0; i < submitCount; i++) {

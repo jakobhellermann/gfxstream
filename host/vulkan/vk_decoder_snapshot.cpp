@@ -62,11 +62,14 @@ class VkDecoderSnapshot::Impl {
                                   std::vector<uint64_t>* outSubCmdBuffer,
                                   std::vector<uint8_t>* outSubPacketBuffer,
                                   std::vector<uint32_t>* outSubDependencyCounts,
-                                  std::vector<uint64_t>* outSubDependencies) {
+                                  std::vector<uint64_t>* outSubDependencies,
+                                  std::vector<uint64_t>* outDroppedCmdBuffers,
+                                  std::vector<uint64_t>* outDroppedDependencies) {
         VkReconstruction::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
                                             outRecordingReplayBuffer,
                                             outSubCmdBuffer, outSubPacketBuffer,
-                                            outSubDependencyCounts, outSubDependencies);
+                                            outSubDependencyCounts, outSubDependencies,
+                                            outDroppedCmdBuffers, outDroppedDependencies);
     }
 
     VkSnapshotApiCallHandle createApiCallInfo() {
@@ -3152,11 +3155,14 @@ void VkDecoderSnapshot::loadReplayBuffers(gfxstream::Stream* stream,
                                           std::vector<uint64_t>* outSubCmdBuffer,
                                           std::vector<uint8_t>* outSubPacketBuffer,
                                           std::vector<uint32_t>* outSubDependencyCounts,
-                                          std::vector<uint64_t>* outSubDependencies) {
+                                          std::vector<uint64_t>* outSubDependencies,
+                                          std::vector<uint64_t>* outDroppedCmdBuffers,
+                                          std::vector<uint64_t>* outDroppedDependencies) {
     VkDecoderSnapshot::Impl::loadReplayBuffers(stream, outHandleBuffer, outDecoderBuffer,
                                                outRecordingReplayBuffer,
                                                outSubCmdBuffer, outSubPacketBuffer,
-                                               outSubDependencyCounts, outSubDependencies);
+                                               outSubDependencyCounts, outSubDependencies,
+                                               outDroppedCmdBuffers, outDroppedDependencies);
 }
 
 VkSnapshotApiCallHandle VkDecoderSnapshot::createApiCallInfo() {

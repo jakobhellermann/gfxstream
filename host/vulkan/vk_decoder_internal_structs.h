@@ -629,8 +629,13 @@ struct CommandBufferInfo {
     std::unordered_set<VkEvent> eventsSet;
     std::unordered_set<VkEvent> eventsReset;
 
+    // Dependency whose destruction made the last snapshot drop this buffer's
+    // recording; 0 once re-recorded or reported.
+    uint64_t snapshotDroppedDependency = 0;
+
     void reset() {
         subCmds.clear();
+        snapshotDroppedDependency = 0;
         computePipeline = VK_NULL_HANDLE;
         firstSet = 0;
         descriptorLayout = VK_NULL_HANDLE;
