@@ -66,7 +66,9 @@ class VkDecoderSnapshot {
                                   std::vector<uint64_t>* outSubCmdBuffer,
                                   std::vector<uint8_t>* outSubPacketBuffer,
                                   std::vector<uint32_t>* outSubDependencyCounts,
-                                  std::vector<uint64_t>* outSubDependencies);
+                                  std::vector<uint64_t>* outSubDependencies,
+                                  std::vector<uint64_t>* outDroppedCmdBuffers,
+                                  std::vector<uint64_t>* outDroppedDependencies);
 
     VkSnapshotApiCallHandle createApiCallInfo();
     void destroyApiCallInfoIfUnused(VkSnapshotApiCallHandle handle);

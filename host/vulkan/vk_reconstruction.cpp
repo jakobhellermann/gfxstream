@@ -124,21 +124,57 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     // Destroying a referenced Vulkan object invalidates a recorded command
     // buffer even when the command buffer itself remains allocated. The
     // snapshot layer already recorded each packet's object dependencies.
-    std::set<uint64_t> invalidRecordings;
+    // Command buffer -> the dependency that invalidated its recording.
+    std::map<uint64_t, uint64_t> invalidRecordings;
+    std::set<uint64_t> untrackedDependencyWarned;
     for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
         const auto* info = mApiCallManager.get(apiHandle);
         if (!info) continue;
-        for (uint64_t dependency : info->depends) {
-            if (dependency && !mGraph.getDepNode(dependency)) {
-                if (invalidRecordings.insert(boxedCmd).second) {
+        if (info->dependTimestamps.size() != info->depends.size()) {
+            GFXSTREAM_FATAL("snapshot save: api call %llu has %zu dependencies but %zu timestamps",
+                            (unsigned long long)apiHandle, info->depends.size(),
+                            info->dependTimestamps.size());
+        }
+        for (size_t i = 0; i < info->depends.size(); ++i) {
+            const uint64_t dependency = info->depends[i];
+            if (!dependency) continue;
+            const uint64_t recordedTimestamp = info->dependTimestamps[i];
+            const auto* node = mGraph.getDepNode(dependency);
+            const char* reason = nullptr;
+            if (!node) {
+                reason = recordedTimestamp ? "was destroyed"
+                                           : "was never in the replay graph";
+            } else if (recordedTimestamp && node->timestamp != recordedTimestamp) {
+                // The boxed handle value was recycled: the object the recording
+                // used is gone, the live node belongs to a newer object.
+                reason = "was destroyed and its handle reused by a newer object";
+            } else if (!recordedTimestamp &&
+                       untrackedDependencyWarned.insert(boxedCmd).second) {
+                GFXSTREAM_WARNING(
+                    "snapshot save: command buffer 0x%llx recorded a use of 0x%llx before it "
+                    "entered the replay graph; cannot tell whether the handle was reused, "
+                    "keeping the recording",
+                    (unsigned long long)boxedCmd, (unsigned long long)dependency);
+            }
+            if (reason) {
+                if (invalidRecordings.emplace(boxedCmd, dependency).second) {
                     GFXSTREAM_WARNING(
-                        "snapshot save: skip command buffer 0x%llx with destroyed dependency "
-                        "0x%llx",
-                        (unsigned long long)boxedCmd, (unsigned long long)dependency);
+                        "snapshot save: skip command buffer 0x%llx: dependency 0x%llx %s",
+                        (unsigned long long)boxedCmd, (unsigned long long)dependency, reason);
                 }
                 break;
             }
         }
+    }
+    // Live command buffers whose recording is dropped; the loader flags them
+    // so a submit without re-recording is reported instead of silently
+    // executing an empty buffer.
+    std::vector<uint64_t> droppedCmdBuffers;
+    std::vector<uint64_t> droppedDependencies;
+    for (const auto& [boxedCmd, dependency] : invalidRecordings) {
+        if (!mGraph.getDepNode(boxedCmd)) continue;
+        droppedCmdBuffers.push_back(boxedCmd);
+        droppedDependencies.push_back(dependency);
     }
     for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
         // Drop entries for command buffers that no longer exist (freed, or
@@ -227,6 +263,8 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
     gfxstream::host::saveBuffer(stream, subPacketBuffer);
     gfxstream::host::saveBuffer(stream, subDependencyCounts);
     gfxstream::host::saveBuffer(stream, subDependencies);
+    gfxstream::host::saveBuffer(stream, droppedCmdBuffers);
+    gfxstream::host::saveBuffer(stream, droppedDependencies);
 }
 
 /*static*/
@@ -237,7 +275,9 @@ void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
                                          std::vector<uint64_t>* outSubCmdBuffer,
                                          std::vector<uint8_t>* outSubPacketBuffer,
                                          std::vector<uint32_t>* outSubDependencyCounts,
-                                         std::vector<uint64_t>* outSubDependencies) {
+                                         std::vector<uint64_t>* outSubDependencies,
+                                         std::vector<uint64_t>* outDroppedCmdBuffers,
+                                         std::vector<uint64_t>* outDroppedDependencies) {
     DEBUG_RECON("starting to unpack decoder replay buffer");
 
     gfxstream::host::loadBuffer(stream, outHandleBuffer);
@@ -247,6 +287,8 @@ void VkReconstruction::loadReplayBuffers(gfxstream::Stream* stream,
     gfxstream::host::loadBuffer(stream, outSubPacketBuffer);
     gfxstream::host::loadBuffer(stream, outSubDependencyCounts);
     gfxstream::host::loadBuffer(stream, outSubDependencies);
+    gfxstream::host::loadBuffer(stream, outDroppedCmdBuffers);
+    gfxstream::host::loadBuffer(stream, outDroppedDependencies);
 
     DEBUG_RECON("finished unpacking decoder replay buffer");
 }
@@ -296,6 +338,10 @@ void VkReconstruction::setApiDependencies(VkSnapshotApiCallHandle apiCallHandle,
     } else {
         info->depends.assign(dependencies, dependencies + count);
     }
+    info->dependTimestamps.clear();
+    for (uint64_t dependency : info->depends) {
+        info->dependTimestamps.push_back(depNodeTimestamp(dependency));
+    }
 }
 
 void VkReconstruction::dump() { DEBUG_RECON("%s: dep graph dump", __func__); }
@@ -344,6 +390,12 @@ void VkReconstruction::addApiCallDependencyOnVkObject(VkSnapshotApiCallHandle ha
     if (!info) return;
 
     info->depends.push_back(object);
+    info->dependTimestamps.push_back(depNodeTimestamp(object));
+}
+
+uint64_t VkReconstruction::depNodeTimestamp(uint64_t id) {
+    const auto* node = mGraph.getDepNode(id);
+    return node ? node->timestamp : 0;
 }
 
 void VkReconstruction::addHandleDependenciesForApiCallDependencies(VkSnapshotApiCallHandle apiCallHandle,
