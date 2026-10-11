@@ -1032,10 +1032,20 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
     } else if (resourceSnapshot.has_external_memory_mapping()) {
         const auto& snapshotDescriptorInfo = resourceSnapshot.external_memory_mapping();
 
-        auto memoryMappingOpt = ExternalObjectManager::get()->removeMapping(
-            snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
+        // A ring blob restored from a re-attached mapping is saved as an
+        // external mapping by the next snapshot, so its re-attach is keyed
+        // by resource id like in the ring blob branch above.
+        auto memoryMappingOpt = ExternalObjectManager::get()->removeRingMapping(resource.mId);
         if (!memoryMappingOpt) {
-            GFXSTREAM_ERROR("Failed to restore resource: failed to find mapping info.");
+            memoryMappingOpt = ExternalObjectManager::get()->removeMapping(
+                snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
+        }
+        if (!memoryMappingOpt) {
+            GFXSTREAM_ERROR(
+                "Failed to restore resource %d: no mapping re-attached by resource id or by "
+                "(context %u, blob %llu).",
+                resource.mId, snapshotDescriptorInfo.context_id(),
+                (unsigned long long)snapshotDescriptorInfo.blob_id());
             return std::nullopt;
         }
         resource.mBlobMemory.emplace(std::move(*memoryMappingOpt));
