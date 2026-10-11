@@ -1763,6 +1763,49 @@ class VkDecoderSnapshot::Impl {
     void vkCmdBeginRendering(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
                              const uint8_t* apiCallPacket, size_t apiCallPacketSize,
                              VkCommandBuffer commandBuffer, const VkRenderingInfo* pRenderingInfo) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i) {
+            if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pColorAttachments[i].imageView));
+            }
+            if (pRenderingInfo->pColorAttachments[i].resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pColorAttachments[i].resolveImageView));
+            }
+        }
+        if (pRenderingInfo->pDepthAttachment) {
+            if (pRenderingInfo->pDepthAttachment->imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pDepthAttachment->imageView));
+            }
+            if (pRenderingInfo->pDepthAttachment->resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pDepthAttachment->resolveImageView));
+            }
+        }
+        if (pRenderingInfo->pStencilAttachment) {
+            if (pRenderingInfo->pStencilAttachment->imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pStencilAttachment->imageView));
+            }
+            if (pRenderingInfo->pStencilAttachment->resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pStencilAttachment->resolveImageView));
+            }
+        }
     }
     void vkCmdEndRendering(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle apiCallHandle,
                            const uint8_t* apiCallPacket, size_t apiCallPacketSize,
@@ -1999,7 +2042,51 @@ class VkDecoderSnapshot::Impl {
     void vkCmdBeginRenderingKHR(gfxstream::base::BumpPool* pool,
                                 VkSnapshotApiCallHandle apiCallHandle, const uint8_t* apiCallPacket,
                                 size_t apiCallPacketSize, VkCommandBuffer commandBuffer,
-                                const VkRenderingInfo* pRenderingInfo) {}
+                                const VkRenderingInfo* pRenderingInfo) {
+        std::lock_guard<std::mutex> lock(mReconstructionMutex);
+        for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; ++i) {
+            if (pRenderingInfo->pColorAttachments[i].imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pColorAttachments[i].imageView));
+            }
+            if (pRenderingInfo->pColorAttachments[i].resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pColorAttachments[i].resolveImageView));
+            }
+        }
+        if (pRenderingInfo->pDepthAttachment) {
+            if (pRenderingInfo->pDepthAttachment->imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pDepthAttachment->imageView));
+            }
+            if (pRenderingInfo->pDepthAttachment->resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pDepthAttachment->resolveImageView));
+            }
+        }
+        if (pRenderingInfo->pStencilAttachment) {
+            if (pRenderingInfo->pStencilAttachment->imageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pStencilAttachment->imageView));
+            }
+            if (pRenderingInfo->pStencilAttachment->resolveImageView != VK_NULL_HANDLE) {
+                mReconstruction.addApiCallDependencyOnVkObject(
+                    apiCallHandle,
+                    (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkImageView(
+                        pRenderingInfo->pStencilAttachment->resolveImageView));
+            }
+        }
+    }
     void vkCmdEndRenderingKHR(gfxstream::base::BumpPool* pool,
                               VkSnapshotApiCallHandle apiCallHandle, const uint8_t* apiCallPacket,
                               size_t apiCallPacketSize, VkCommandBuffer commandBuffer) {}
