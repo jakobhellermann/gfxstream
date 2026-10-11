@@ -132,6 +132,13 @@ class ExternalObjectManager {
     void addMapping(uint32_t ctx_id, uint64_t blobId, void* addr, uint32_t caching);
     std::optional<HostMemInfo> removeMapping(uint32_t ctx_id, uint64_t blobId);
 
+    // Ring mappings are keyed by the virtio-gpu resource id: the guest
+    // numbers its ring blobs per context (every ASG context claims blob id
+    // 0), so a (ctx, blob) key cannot tell two rings apart and a restore
+    // must not pick up another ring's re-attached memory.
+    void addRingMapping(uint32_t resourceId, void* addr, uint32_t caching);
+    std::optional<HostMemInfo> removeRingMapping(uint32_t resourceId);
+
     void addBlobDescriptorInfo(uint32_t ctx_id, uint64_t blobId, BlobDescriptorValueType descriptor,
                                uint32_t streamHandleType, uint32_t caching,
                                std::optional<VulkanInfo> vulkanInfoOpt);
@@ -166,6 +173,7 @@ class ExternalObjectManager {
     std::mutex mMutex;
     std::unordered_map<std::pair<uint32_t, uint64_t>, HostMemInfo, pair_hash> mHostMemInfos
         GUARDED_BY(mMutex);
+    std::unordered_map<uint32_t, HostMemInfo> mRingMemInfos GUARDED_BY(mMutex);
     std::unordered_map<std::pair<uint32_t, uint64_t>, BlobDescriptorInfo, pair_hash>
         mBlobDescriptorInfos GUARDED_BY(mMutex);
     std::unordered_map<std::pair<uint32_t, uint64_t>, SyncDescriptorInfo, pair_hash>
