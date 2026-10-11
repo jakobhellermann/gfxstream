@@ -498,6 +498,11 @@ VG_EXPORT void stream_renderer_reattach_blob_mapping(uint32_t ctx_id, uint32_t b
     gfxstream::host::ExternalObjectManager::get()->addMapping(ctx_id, blob_id, addr, caching);
 }
 
+VG_EXPORT void stream_renderer_reattach_ring_mapping(uint32_t resource_id, void* addr,
+                                                      uint32_t caching) {
+    gfxstream::host::ExternalObjectManager::get()->addRingMapping(resource_id, addr, caching);
+}
+
 VG_EXPORT void stream_renderer_reattach_blob_descriptor(uint32_t ctx_id, uint64_t blob_id,
                                                         int fd, uint32_t stream_handle_type) {
     gfxstream::base::ManagedDescriptor descriptor(fd);

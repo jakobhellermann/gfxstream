@@ -51,6 +51,29 @@ std::optional<HostMemInfo> ExternalObjectManager::removeMapping(uint32_t ctxId, 
     return std::nullopt;
 }
 
+void ExternalObjectManager::addRingMapping(uint32_t resourceId, void* addr,
+                                            uint32_t caching) {
+    struct HostMemInfo info = {
+        .addr = addr,
+        .caching = caching,
+    };
+
+    std::lock_guard<std::mutex> lock(mMutex);
+    mRingMemInfos.insert_or_assign(resourceId, info);
+}
+
+std::optional<HostMemInfo> ExternalObjectManager::removeRingMapping(uint32_t resourceId) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    auto found = mRingMemInfos.find(resourceId);
+    if (found != mRingMemInfos.end()) {
+        std::optional<HostMemInfo> ret = found->second;
+        mRingMemInfos.erase(found);
+        return ret;
+    }
+
+    return std::nullopt;
+}
+
 void ExternalObjectManager::addBlobDescriptorInfo(uint32_t ctxId, uint64_t blobId,
                                                   BlobDescriptorValueType descriptor,
                                                   uint32_t streamHandleType, uint32_t caching,
@@ -119,6 +142,7 @@ void ExternalObjectManager::clearBlobObjects() {
     std::lock_guard<std::mutex> lock(mMutex);
     mHostMemInfos.clear();
     mBlobDescriptorInfos.clear();
+    mRingMemInfos.clear();
 }
 
 }  // namespace host

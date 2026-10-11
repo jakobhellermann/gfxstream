@@ -970,9 +970,14 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
         // client keeps mapping the pre-restore shmem and its content is
         // restored by the guest memory snapshot, so a fresh shmem here would
         // detach the host from the client's ring (see
-        // stream_renderer_reattach_blob_mapping).
-        std::optional<HostMemInfo> reattachedMapping = std::nullopt;
-        if (resourceSnapshot.has_latest_attached_context() && resource.mCreateBlobArgs) {
+        // stream_renderer_reattach_ring_mapping). The ring lookup goes
+        // through the resource id: the guest numbers its ring blobs per
+        // context (blob id 0 for every ASG context), so a (ctx, blob) key
+        // cannot tell two rings apart.
+        std::optional<HostMemInfo> reattachedMapping =
+            ExternalObjectManager::get()->removeRingMapping(resource.mId);
+        if (!reattachedMapping && resourceSnapshot.has_latest_attached_context() &&
+            resource.mCreateBlobArgs) {
             reattachedMapping = ExternalObjectManager::get()->removeMapping(
                 resourceSnapshot.latest_attached_context(), resource.mCreateBlobArgs->blob_id);
         }
