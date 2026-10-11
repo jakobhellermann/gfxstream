@@ -66,6 +66,9 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
         readStream->setBuf((uint8_t*)(ptr + 8));
         uint8_t* readStreamPtr = readStream->getBuf();
         uint8_t** readStreamPtrPtr = &readStreamPtr;
+        // Every handle this packet references is unboxed while it is decoded;
+        // the snapshot records them as the packet's dependencies.
+        ScopedUnboxedHandleRecorder unboxedHandles;
         switch (opcode) {
 #ifdef VK_BASE_VERSION_1_0
             case OP_vkBeginCommandBuffer: {
@@ -89,7 +92,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 }
                 if ((vkBeginCommandBuffer_VkResult_return) == VK_ERROR_DEVICE_LOST)
                     this->on_DeviceLost();
-                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkBeginCommandBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                            vkBeginCommandBuffer_VkResult_return,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
@@ -108,7 +111,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 }
                 if ((vkEndCommandBuffer_VkResult_return) == VK_ERROR_DEVICE_LOST)
                     this->on_DeviceLost();
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkEndCommandBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                          vkEndCommandBuffer_VkResult_return,
                                                          (VkCommandBuffer)(boxed_dispatchHandle));
@@ -130,7 +133,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 }
                 if ((vkResetCommandBuffer_VkResult_return) == VK_ERROR_DEVICE_LOST)
                     this->on_DeviceLost();
-                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkResetCommandBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                            vkResetCommandBuffer_VkResult_return,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
@@ -174,7 +177,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdCopyBuffer((VkCommandBuffer)dispatchHandle, srcBuffer, dstBuffer,
                                         regionCount, pRegions);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       srcBuffer, dstBuffer, regionCount, pRegions);
@@ -224,7 +227,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImage(pool, subApiCallHandle, ptr, packetLen,
                                                      (VkCommandBuffer)(boxed_dispatchHandle),
                                                      srcImage, srcImageLayout, dstImage,
@@ -275,7 +278,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         srcBuffer, dstImage, dstImageLayout, regionCount, pRegions, context);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBufferToImage(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), srcBuffer, dstImage,
@@ -326,7 +329,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImageToBuffer(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), srcImage, srcImageLayout,
@@ -363,7 +366,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdUpdateBuffer((VkCommandBuffer)dispatchHandle, dstBuffer, dstOffset,
                                           dataSize, pData);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdUpdateBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         dstBuffer, dstOffset, dataSize, pData);
@@ -391,7 +394,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdFillBuffer((VkCommandBuffer)dispatchHandle, dstBuffer, dstOffset, size,
                                         data);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdFillBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       dstBuffer, dstOffset, size, data);
@@ -487,7 +490,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers,
                         imageMemoryBarrierCount, pImageMemoryBarriers);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPipelineBarrier(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), srcStageMask, dstStageMask,
@@ -516,7 +519,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBeginQuery((VkCommandBuffer)dispatchHandle, queryPool, query, flags);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginQuery(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       queryPool, query, flags);
@@ -538,7 +541,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndQuery((VkCommandBuffer)dispatchHandle, queryPool, query);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndQuery(pool, subApiCallHandle, ptr, packetLen,
                                                     (VkCommandBuffer)(boxed_dispatchHandle),
                                                     queryPool, query);
@@ -564,7 +567,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdResetQueryPool((VkCommandBuffer)dispatchHandle, queryPool, firstQuery,
                                             queryCount);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResetQueryPool(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           queryPool, firstQuery, queryCount);
@@ -591,7 +594,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdWriteTimestamp((VkCommandBuffer)dispatchHandle, pipelineStage,
                                             queryPool, query);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWriteTimestamp(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           pipelineStage, queryPool, query);
@@ -632,7 +635,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         queryPool, firstQuery, queryCount, dstBuffer, dstOffset, stride, flags);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyQueryPoolResults(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), queryPool, firstQuery, queryCount,
@@ -670,7 +673,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                   (VkCommandBuffer)(boxed_dispatchHandle),
                                                   commandBufferCount, pCommandBuffers);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdExecuteCommands(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            commandBufferCount, pCommandBuffers);
@@ -696,7 +699,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                (VkCommandBuffer)(boxed_dispatchHandle),
                                                pipelineBindPoint, pipeline);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindPipeline(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         pipelineBindPoint, pipeline);
@@ -763,7 +766,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets,
                         dynamicOffsetCount, pDynamicOffsets);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindDescriptorSets(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pipelineBindPoint, layout,
@@ -817,7 +820,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdClearColorImage((VkCommandBuffer)dispatchHandle, image, imageLayout,
                                              pColor, rangeCount, pRanges);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdClearColorImage(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            image, imageLayout, pColor, rangeCount,
@@ -841,7 +844,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDispatch((VkCommandBuffer)dispatchHandle, groupCountX, groupCountY,
                                       groupCountZ);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDispatch(pool, subApiCallHandle, ptr, packetLen,
                                                     (VkCommandBuffer)(boxed_dispatchHandle),
                                                     groupCountX, groupCountY, groupCountZ);
@@ -862,7 +865,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdDispatchIndirect((VkCommandBuffer)dispatchHandle, buffer, offset);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDispatchIndirect(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             buffer, offset);
@@ -886,7 +889,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                            (VkCommandBuffer)(boxed_dispatchHandle), event,
                                            stageMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetEvent(pool, subApiCallHandle, ptr, packetLen,
                                                     (VkCommandBuffer)(boxed_dispatchHandle), event,
                                                     stageMask);
@@ -910,7 +913,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                              (VkCommandBuffer)(boxed_dispatchHandle), event,
                                              stageMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResetEvent(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       event, stageMask);
@@ -1021,7 +1024,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         dstStageMask, memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount,
                         pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWaitEvents(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), eventCount, pEvents, srcStageMask,
@@ -1064,7 +1067,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdPushConstants((VkCommandBuffer)dispatchHandle, layout, stageFlags,
                                            offset, size, pValues);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushConstants(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          layout, stageFlags, offset, size, pValues);
@@ -1103,7 +1106,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetViewport((VkCommandBuffer)dispatchHandle, firstViewport,
                                          viewportCount, pViewports);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetViewport(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        firstViewport, viewportCount, pViewports);
@@ -1139,7 +1142,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetScissor((VkCommandBuffer)dispatchHandle, firstScissor, scissorCount,
                                         pScissors);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetScissor(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       firstScissor, scissorCount, pScissors);
@@ -1155,7 +1158,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetLineWidth((VkCommandBuffer)dispatchHandle, lineWidth);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetLineWidth(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         lineWidth);
@@ -1178,7 +1181,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthBias((VkCommandBuffer)dispatchHandle, depthBiasConstantFactor,
                                           depthBiasClamp, depthBiasSlopeFactor);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBias(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         depthBiasConstantFactor, depthBiasClamp,
@@ -1195,7 +1198,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetBlendConstants((VkCommandBuffer)dispatchHandle, blendConstants);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetBlendConstants(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), blendConstants);
@@ -1215,7 +1218,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthBounds((VkCommandBuffer)dispatchHandle, minDepthBounds,
                                             maxDepthBounds);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBounds(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           minDepthBounds, maxDepthBounds);
@@ -1236,7 +1239,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilCompareMask((VkCommandBuffer)dispatchHandle, faceMask,
                                                    compareMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilCompareMask(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), faceMask, compareMask);
@@ -1257,7 +1260,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilWriteMask((VkCommandBuffer)dispatchHandle, faceMask,
                                                  writeMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilWriteMask(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), faceMask, writeMask);
@@ -1278,7 +1281,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilReference((VkCommandBuffer)dispatchHandle, faceMask,
                                                  reference);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilReference(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), faceMask, reference);
@@ -1303,7 +1306,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindIndexBuffer((VkCommandBuffer)dispatchHandle, buffer, offset,
                                              indexType);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindIndexBuffer(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            buffer, offset, indexType);
@@ -1352,7 +1355,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindVertexBuffers((VkCommandBuffer)dispatchHandle, firstBinding,
                                                bindingCount, pBuffers, pOffsets);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindVertexBuffers(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstBinding, bindingCount,
@@ -1378,7 +1381,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDraw((VkCommandBuffer)dispatchHandle, vertexCount, instanceCount,
                                   firstVertex, firstInstance);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDraw(pool, subApiCallHandle, ptr, packetLen,
                                                 (VkCommandBuffer)(boxed_dispatchHandle),
                                                 vertexCount, instanceCount, firstVertex,
@@ -1408,7 +1411,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDrawIndexed((VkCommandBuffer)dispatchHandle, indexCount, instanceCount,
                                          firstIndex, vertexOffset, firstInstance);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndexed(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        indexCount, instanceCount, firstIndex,
@@ -1437,7 +1440,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDrawIndirect((VkCommandBuffer)dispatchHandle, buffer, offset,
                                           drawCount, stride);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndirect(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         buffer, offset, drawCount, stride);
@@ -1465,7 +1468,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDrawIndexedIndirect((VkCommandBuffer)dispatchHandle, buffer, offset,
                                                  drawCount, stride);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndexedIndirect(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), buffer, offset, drawCount, stride);
@@ -1517,7 +1520,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBlitImage((VkCommandBuffer)dispatchHandle, srcImage, srcImageLayout,
                                        dstImage, dstImageLayout, regionCount, pRegions, filter);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBlitImage(pool, subApiCallHandle, ptr, packetLen,
                                                      (VkCommandBuffer)(boxed_dispatchHandle),
                                                      srcImage, srcImageLayout, dstImage,
@@ -1573,7 +1576,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                     imageLayout, pDepthStencil, rangeCount,
                                                     pRanges);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdClearDepthStencilImage(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), image, imageLayout, pDepthStencil,
@@ -1629,7 +1632,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdClearAttachments((VkCommandBuffer)dispatchHandle, attachmentCount,
                                               pAttachments, rectCount, pRects);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdClearAttachments(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             attachmentCount, pAttachments,
@@ -1682,7 +1685,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdResolveImage((VkCommandBuffer)dispatchHandle, srcImage, srcImageLayout,
                                           dstImage, dstImageLayout, regionCount, pRegions);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResolveImage(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         srcImage, srcImageLayout, dstImage,
@@ -1711,7 +1714,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                   (VkCommandBuffer)(boxed_dispatchHandle),
                                                   pRenderPassBegin, contents);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginRenderPass(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            pRenderPassBegin, contents);
@@ -1727,7 +1730,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdNextSubpass((VkCommandBuffer)dispatchHandle, contents);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdNextSubpass(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        contents);
@@ -1740,7 +1743,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndRenderPass((VkCommandBuffer)dispatchHandle);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndRenderPass(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle));
                 }
@@ -1757,7 +1760,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDeviceMask((VkCommandBuffer)dispatchHandle, deviceMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDeviceMask(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          deviceMask);
@@ -1791,7 +1794,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdDispatchBase((VkCommandBuffer)dispatchHandle, baseGroupX, baseGroupY,
                                           baseGroupZ, groupCountX, groupCountY, groupCountZ);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDispatchBase(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         baseGroupX, baseGroupY, baseGroupZ,
@@ -1831,7 +1834,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                countBuffer, countBufferOffset, maxDrawCount,
                                                stride);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndirectCount(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), buffer, offset, countBuffer,
@@ -1869,7 +1872,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                       offset, countBuffer, countBufferOffset,
                                                       maxDrawCount, stride);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndexedIndirectCount(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), buffer, offset, countBuffer,
@@ -1905,7 +1908,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                    (VkCommandBuffer)(boxed_dispatchHandle),
                                                    pRenderPassBegin, pSubpassBeginInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginRenderPass2(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             pRenderPassBegin, pSubpassBeginInfo);
@@ -1939,7 +1942,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdNextSubpass2((VkCommandBuffer)dispatchHandle, pSubpassBeginInfo,
                                           pSubpassEndInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdNextSubpass2(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         pSubpassBeginInfo, pSubpassEndInfo);
@@ -1962,7 +1965,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndRenderPass2((VkCommandBuffer)dispatchHandle, pSubpassEndInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndRenderPass2(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           pSubpassEndInfo);
@@ -1989,7 +1992,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                    (VkCommandBuffer)(boxed_dispatchHandle),
                                                    pDependencyInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPipelineBarrier2(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             pDependencyInfo);
@@ -2016,7 +2019,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdWriteTimestamp2((VkCommandBuffer)dispatchHandle, stage, queryPool,
                                              query);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWriteTimestamp2(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            stage, queryPool, query);
@@ -2039,7 +2042,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdCopyBuffer2((VkCommandBuffer)dispatchHandle, pCopyBufferInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBuffer2(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        pCopyBufferInfo);
@@ -2064,7 +2067,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                              (VkCommandBuffer)(boxed_dispatchHandle),
                                              pCopyImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImage2(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       pCopyImageInfo);
@@ -2089,7 +2092,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                      (VkCommandBuffer)(boxed_dispatchHandle),
                                                      pCopyBufferToImageInfo, context);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBufferToImage2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pCopyBufferToImageInfo);
@@ -2114,7 +2117,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                      (VkCommandBuffer)(boxed_dispatchHandle),
                                                      pCopyImageToBufferInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImageToBuffer2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pCopyImageToBufferInfo);
@@ -2144,7 +2147,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetEvent2((VkCommandBuffer)dispatchHandle, event, pDependencyInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetEvent2(pool, subApiCallHandle, ptr, packetLen,
                                                      (VkCommandBuffer)(boxed_dispatchHandle), event,
                                                      pDependencyInfo);
@@ -2166,7 +2169,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdResetEvent2((VkCommandBuffer)dispatchHandle, event, stageMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResetEvent2(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        event, stageMask);
@@ -2219,7 +2222,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdWaitEvents2((VkCommandBuffer)dispatchHandle, eventCount, pEvents,
                                          pDependencyInfos);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWaitEvents2(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        eventCount, pEvents, pDependencyInfos);
@@ -2244,7 +2247,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBlitImage2((VkCommandBuffer)dispatchHandle, pBlitImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBlitImage2(pool, subApiCallHandle, ptr, packetLen,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       pBlitImageInfo);
@@ -2267,7 +2270,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdResolveImage2((VkCommandBuffer)dispatchHandle, pResolveImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResolveImage2(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          pResolveImageInfo);
@@ -2290,7 +2293,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBeginRendering((VkCommandBuffer)dispatchHandle, pRenderingInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginRendering(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           pRenderingInfo);
@@ -2303,7 +2306,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndRendering((VkCommandBuffer)dispatchHandle);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndRendering(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle));
                 }
@@ -2318,7 +2321,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetCullMode((VkCommandBuffer)dispatchHandle, cullMode);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetCullMode(pool, subApiCallHandle, ptr, packetLen,
                                                        (VkCommandBuffer)(boxed_dispatchHandle),
                                                        cullMode);
@@ -2334,7 +2337,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetFrontFace((VkCommandBuffer)dispatchHandle, frontFace);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetFrontFace(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         frontFace);
@@ -2352,7 +2355,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetPrimitiveTopology((VkCommandBuffer)dispatchHandle,
                                                   primitiveTopology);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetPrimitiveTopology(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), primitiveTopology);
@@ -2386,7 +2389,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetViewportWithCount((VkCommandBuffer)dispatchHandle, viewportCount,
                                                   pViewports);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetViewportWithCount(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), viewportCount, pViewports);
@@ -2419,7 +2422,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetScissorWithCount((VkCommandBuffer)dispatchHandle, scissorCount,
                                                  pScissors);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetScissorWithCount(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), scissorCount, pScissors);
@@ -2513,7 +2516,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindVertexBuffers2((VkCommandBuffer)dispatchHandle, firstBinding,
                                                 bindingCount, pBuffers, pOffsets, pSizes, pStrides);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindVertexBuffers2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstBinding, bindingCount,
@@ -2530,7 +2533,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDepthTestEnable((VkCommandBuffer)dispatchHandle, depthTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthTestEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthTestEnable);
@@ -2546,7 +2549,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDepthWriteEnable((VkCommandBuffer)dispatchHandle, depthWriteEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthWriteEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthWriteEnable);
@@ -2562,7 +2565,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDepthCompareOp((VkCommandBuffer)dispatchHandle, depthCompareOp);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthCompareOp(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthCompareOp);
@@ -2579,7 +2582,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthBoundsTestEnable((VkCommandBuffer)dispatchHandle,
                                                       depthBoundsTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBoundsTestEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthBoundsTestEnable);
@@ -2596,7 +2599,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilTestEnable((VkCommandBuffer)dispatchHandle,
                                                   stencilTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilTestEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), stencilTestEnable);
@@ -2626,7 +2629,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilOp((VkCommandBuffer)dispatchHandle, faceMask, failOp, passOp,
                                           depthFailOp, compareOp);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilOp(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         faceMask, failOp, passOp, depthFailOp,
@@ -2644,7 +2647,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetRasterizerDiscardEnable((VkCommandBuffer)dispatchHandle,
                                                         rasterizerDiscardEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetRasterizerDiscardEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), rasterizerDiscardEnable);
@@ -2660,7 +2663,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDepthBiasEnable((VkCommandBuffer)dispatchHandle, depthBiasEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBiasEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthBiasEnable);
@@ -2677,7 +2680,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetPrimitiveRestartEnable((VkCommandBuffer)dispatchHandle,
                                                        primitiveRestartEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetPrimitiveRestartEnable(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), primitiveRestartEnable);
@@ -2729,7 +2732,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                layout, set, descriptorWriteCount,
                                                pDescriptorWrites);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSet(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pipelineBindPoint, layout, set,
@@ -2772,7 +2775,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                            descriptorUpdateTemplate, layout, set,
                                                            pData);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSetWithTemplate(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), descriptorUpdateTemplate, layout,
@@ -2797,7 +2800,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindDescriptorSets2((VkCommandBuffer)dispatchHandle,
                                                  pBindDescriptorSetsInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindDescriptorSets2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pBindDescriptorSetsInfo);
@@ -2820,7 +2823,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdPushConstants2((VkCommandBuffer)dispatchHandle, pPushConstantsInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushConstants2(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           pPushConstantsInfo);
@@ -2844,7 +2847,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdPushDescriptorSet2((VkCommandBuffer)dispatchHandle,
                                                 pPushDescriptorSetInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSet2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pPushDescriptorSetInfo);
@@ -2871,7 +2874,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdPushDescriptorSetWithTemplate2((VkCommandBuffer)dispatchHandle,
                                                             pPushDescriptorSetWithTemplateInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSetWithTemplate2(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle),
@@ -2894,7 +2897,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetLineStipple((VkCommandBuffer)dispatchHandle, lineStippleFactor,
                                             lineStipplePattern);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetLineStipple(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           lineStippleFactor, lineStipplePattern);
@@ -2922,7 +2925,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindIndexBuffer2((VkCommandBuffer)dispatchHandle, buffer, offset, size,
                                               indexType);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindIndexBuffer2(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             buffer, offset, size, indexType);
@@ -2946,7 +2949,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetRenderingAttachmentLocations((VkCommandBuffer)dispatchHandle,
                                                              pLocationInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetRenderingAttachmentLocations(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pLocationInfo);
@@ -2973,7 +2976,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetRenderingInputAttachmentIndices((VkCommandBuffer)dispatchHandle,
                                                                 pInputAttachmentIndexInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetRenderingInputAttachmentIndices(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pInputAttachmentIndexInfo);
@@ -2998,7 +3001,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBeginRenderingKHR((VkCommandBuffer)dispatchHandle, pRenderingInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginRenderingKHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pRenderingInfo);
@@ -3011,7 +3014,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndRenderingKHR((VkCommandBuffer)dispatchHandle);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndRenderingKHR(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle));
                 }
@@ -3054,7 +3057,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                               descriptorUpdateTemplate, layout, set,
                                                               pData);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSetWithTemplateKHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), descriptorUpdateTemplate, layout,
@@ -3092,7 +3095,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                       (VkCommandBuffer)(boxed_dispatchHandle),
                                                       pRenderPassBegin, pSubpassBeginInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginRenderPass2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pRenderPassBegin,
@@ -3127,7 +3130,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdNextSubpass2KHR((VkCommandBuffer)dispatchHandle, pSubpassBeginInfo,
                                              pSubpassEndInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdNextSubpass2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            pSubpassBeginInfo, pSubpassEndInfo);
@@ -3150,7 +3153,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndRenderPass2KHR((VkCommandBuffer)dispatchHandle, pSubpassEndInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndRenderPass2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pSubpassEndInfo);
@@ -3180,7 +3183,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetEvent2KHR((VkCommandBuffer)dispatchHandle, event, pDependencyInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetEvent2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         event, pDependencyInfo);
@@ -3202,7 +3205,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdResetEvent2KHR((VkCommandBuffer)dispatchHandle, event, stageMask);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResetEvent2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           event, stageMask);
@@ -3255,7 +3258,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdWaitEvents2KHR((VkCommandBuffer)dispatchHandle, eventCount, pEvents,
                                             pDependencyInfos);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWaitEvents2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           eventCount, pEvents, pDependencyInfos);
@@ -3278,7 +3281,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdPipelineBarrier2KHR((VkCommandBuffer)dispatchHandle, pDependencyInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPipelineBarrier2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pDependencyInfo);
@@ -3305,7 +3308,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdWriteTimestamp2KHR((VkCommandBuffer)dispatchHandle, stage, queryPool,
                                                 query);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdWriteTimestamp2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), stage, queryPool, query);
@@ -3330,7 +3333,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdCopyBuffer2KHR((VkCommandBuffer)dispatchHandle, pCopyBufferInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBuffer2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           pCopyBufferInfo);
@@ -3355,7 +3358,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                 (VkCommandBuffer)(boxed_dispatchHandle),
                                                 pCopyImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImage2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          pCopyImageInfo);
@@ -3380,7 +3383,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         pCopyBufferToImageInfo, context);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyBufferToImage2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pCopyBufferToImageInfo);
@@ -3405,7 +3408,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                         (VkCommandBuffer)(boxed_dispatchHandle),
                                                         pCopyImageToBufferInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdCopyImageToBuffer2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pCopyImageToBufferInfo);
@@ -3428,7 +3431,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBlitImage2KHR((VkCommandBuffer)dispatchHandle, pBlitImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBlitImage2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          pBlitImageInfo);
@@ -3451,7 +3454,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdResolveImage2KHR((VkCommandBuffer)dispatchHandle, pResolveImageInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdResolveImage2KHR(pool, subApiCallHandle, ptr, packetLen,
                                                             (VkCommandBuffer)(boxed_dispatchHandle),
                                                             pResolveImageInfo);
@@ -3481,7 +3484,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindIndexBuffer2KHR((VkCommandBuffer)dispatchHandle, buffer, offset,
                                                  size, indexType);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindIndexBuffer2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), buffer, offset, size, indexType);
@@ -3503,7 +3506,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetLineStippleKHR((VkCommandBuffer)dispatchHandle, lineStippleFactor,
                                                lineStipplePattern);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetLineStippleKHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), lineStippleFactor,
@@ -3530,7 +3533,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindDescriptorSets2KHR((VkCommandBuffer)dispatchHandle,
                                                     pBindDescriptorSetsInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindDescriptorSets2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pBindDescriptorSetsInfo);
@@ -3553,7 +3556,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdPushConstants2KHR((VkCommandBuffer)dispatchHandle, pPushConstantsInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushConstants2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pPushConstantsInfo);
@@ -3577,7 +3580,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdPushDescriptorSet2KHR((VkCommandBuffer)dispatchHandle,
                                                    pPushDescriptorSetInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSet2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pPushDescriptorSetInfo);
@@ -3604,7 +3607,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdPushDescriptorSetWithTemplate2KHR((VkCommandBuffer)dispatchHandle,
                                                                pPushDescriptorSetWithTemplateInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdPushDescriptorSetWithTemplate2KHR(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle),
@@ -3632,7 +3635,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDescriptorBufferOffsets2EXT((VkCommandBuffer)dispatchHandle,
                                                             pSetDescriptorBufferOffsetsInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDescriptorBufferOffsets2EXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pSetDescriptorBufferOffsetsInfo);
@@ -3662,7 +3665,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(
                         (VkCommandBuffer)dispatchHandle, pBindDescriptorBufferEmbeddedSamplersInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindDescriptorBufferEmbeddedSamplers2EXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle),
@@ -3734,7 +3737,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                              firstBinding, bindingCount, pBuffers,
                                                              pOffsets, pSizes);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindTransformFeedbackBuffersEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstBinding, bindingCount,
@@ -3800,7 +3803,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                        firstCounterBuffer, counterBufferCount,
                                                        pCounterBuffers, pCounterBufferOffsets);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginTransformFeedbackEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstCounterBuffer,
@@ -3866,7 +3869,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                      firstCounterBuffer, counterBufferCount,
                                                      pCounterBuffers, pCounterBufferOffsets);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndTransformFeedbackEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstCounterBuffer,
@@ -3897,7 +3900,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdBeginQueryIndexedEXT((VkCommandBuffer)dispatchHandle, queryPool, query,
                                                   flags, index);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginQueryIndexedEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), queryPool, query, flags, index);
@@ -3923,7 +3926,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdEndQueryIndexedEXT((VkCommandBuffer)dispatchHandle, queryPool, query,
                                                 index);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndQueryIndexedEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), queryPool, query, index);
@@ -3959,7 +3962,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         (VkCommandBuffer)dispatchHandle, instanceCount, firstInstance,
                         counterBuffer, counterBufferOffset, counterOffset, vertexStride);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdDrawIndirectByteCountEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), instanceCount, firstInstance,
@@ -3985,7 +3988,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdBeginDebugUtilsLabelEXT((VkCommandBuffer)dispatchHandle, pLabelInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBeginDebugUtilsLabelEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pLabelInfo);
@@ -3998,7 +4001,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdEndDebugUtilsLabelEXT((VkCommandBuffer)dispatchHandle);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdEndDebugUtilsLabelEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle));
@@ -4021,7 +4024,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdInsertDebugUtilsLabelEXT((VkCommandBuffer)dispatchHandle, pLabelInfo);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdInsertDebugUtilsLabelEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pLabelInfo);
@@ -4043,7 +4046,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetLineStippleEXT((VkCommandBuffer)dispatchHandle, lineStippleFactor,
                                                lineStipplePattern);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetLineStippleEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), lineStippleFactor,
@@ -4062,7 +4065,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetCullModeEXT((VkCommandBuffer)dispatchHandle, cullMode);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetCullModeEXT(pool, subApiCallHandle, ptr, packetLen,
                                                           (VkCommandBuffer)(boxed_dispatchHandle),
                                                           cullMode);
@@ -4078,7 +4081,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetFrontFaceEXT((VkCommandBuffer)dispatchHandle, frontFace);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetFrontFaceEXT(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            frontFace);
@@ -4096,7 +4099,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetPrimitiveTopologyEXT((VkCommandBuffer)dispatchHandle,
                                                      primitiveTopology);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetPrimitiveTopologyEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), primitiveTopology);
@@ -4130,7 +4133,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetViewportWithCountEXT((VkCommandBuffer)dispatchHandle, viewportCount,
                                                      pViewports);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetViewportWithCountEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), viewportCount, pViewports);
@@ -4163,7 +4166,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetScissorWithCountEXT((VkCommandBuffer)dispatchHandle, scissorCount,
                                                     pScissors);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetScissorWithCountEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), scissorCount, pScissors);
@@ -4258,7 +4261,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                    bindingCount, pBuffers, pOffsets, pSizes,
                                                    pStrides);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdBindVertexBuffers2EXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), firstBinding, bindingCount,
@@ -4276,7 +4279,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthTestEnableEXT((VkCommandBuffer)dispatchHandle,
                                                    depthTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthTestEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthTestEnable);
@@ -4293,7 +4296,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthWriteEnableEXT((VkCommandBuffer)dispatchHandle,
                                                     depthWriteEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthWriteEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthWriteEnable);
@@ -4309,7 +4312,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetDepthCompareOpEXT((VkCommandBuffer)dispatchHandle, depthCompareOp);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthCompareOpEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthCompareOp);
@@ -4326,7 +4329,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthBoundsTestEnableEXT((VkCommandBuffer)dispatchHandle,
                                                          depthBoundsTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBoundsTestEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthBoundsTestEnable);
@@ -4343,7 +4346,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilTestEnableEXT((VkCommandBuffer)dispatchHandle,
                                                      stencilTestEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilTestEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), stencilTestEnable);
@@ -4373,7 +4376,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetStencilOpEXT((VkCommandBuffer)dispatchHandle, faceMask, failOp,
                                              passOp, depthFailOp, compareOp);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetStencilOpEXT(pool, subApiCallHandle, ptr, packetLen,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            faceMask, failOp, passOp, depthFailOp,
@@ -4393,7 +4396,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetPatchControlPointsEXT((VkCommandBuffer)dispatchHandle,
                                                       patchControlPoints);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetPatchControlPointsEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), patchControlPoints);
@@ -4410,7 +4413,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetRasterizerDiscardEnableEXT((VkCommandBuffer)dispatchHandle,
                                                            rasterizerDiscardEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetRasterizerDiscardEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), rasterizerDiscardEnable);
@@ -4427,7 +4430,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetDepthBiasEnableEXT((VkCommandBuffer)dispatchHandle,
                                                    depthBiasEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetDepthBiasEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), depthBiasEnable);
@@ -4443,7 +4446,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                 if (CC_LIKELY(vk)) {
                     vk->vkCmdSetLogicOpEXT((VkCommandBuffer)dispatchHandle, logicOp);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetLogicOpEXT(pool, subApiCallHandle, ptr, packetLen,
                                                          (VkCommandBuffer)(boxed_dispatchHandle),
                                                          logicOp);
@@ -4460,7 +4463,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetPrimitiveRestartEnableEXT((VkCommandBuffer)dispatchHandle,
                                                           primitiveRestartEnable);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetPrimitiveRestartEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), primitiveRestartEnable);
@@ -4492,7 +4495,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                     vk->vkCmdSetColorWriteEnableEXT((VkCommandBuffer)dispatchHandle,
                                                     attachmentCount, pColorWriteEnables);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCmdSetColorWriteEnableEXT(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), attachmentCount,
@@ -4520,7 +4523,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         pBeginInfo, context);
                 }
-                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { this->snapshot()->discardSubDecodeCallsForCmdBuffer((uint64_t)(uintptr_t)boxed_dispatchHandle); VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkBeginCommandBufferAsyncGOOGLE(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), pBeginInfo);
@@ -4535,7 +4538,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            context);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkEndCommandBufferAsyncGOOGLE(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle));
@@ -4554,7 +4557,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                         pool, snapshotApiCallHandle, (VkCommandBuffer)(boxed_dispatchHandle),
                         flags);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkResetCommandBufferAsyncGOOGLE(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), flags);
@@ -4575,7 +4578,7 @@ size_t subDecode(VulkanMemReadingStream* readStream, VulkanDispatch* vk,
                                                            (VkCommandBuffer)(boxed_dispatchHandle),
                                                            needHostSync, sequenceNumber);
                 }
-                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
+                if (snapshotsEnabled()) { VkSnapshotApiCallHandle subApiCallHandle = this->snapshot()->createApiCallInfo(); this->snapshot()->addSubDecodeApiCall(subApiCallHandle, (uint64_t)(uintptr_t)boxed_dispatchHandle); this->snapshot()->setApiDependencies(subApiCallHandle, unboxedHandles.handles().data(), unboxedHandles.handles().size()); this->snapshot()->setApiTrace(subApiCallHandle, ptr, packetLen);
                     this->snapshot()->vkCommandBufferHostSyncGOOGLE(
                         pool, subApiCallHandle, ptr, packetLen,
                         (VkCommandBuffer)(boxed_dispatchHandle), needHostSync, sequenceNumber);

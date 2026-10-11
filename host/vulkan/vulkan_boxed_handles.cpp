@@ -14,6 +14,8 @@
 
 #include "vulkan_boxed_handles.h"
 
+#include <algorithm>
+
 #include "vk_decoder_global_state.h"
 #include "vk_decoder_internal_structs.h"
 
@@ -408,6 +410,20 @@ VkQueue unbox_VkQueueImpl(VkQueue boxed) {
     return (VkQueue)(unboxedQueue64);
 }
 
+thread_local ScopedUnboxedHandleRecorder* tUnboxedHandleRecorder = nullptr;
+
+ScopedUnboxedHandleRecorder::ScopedUnboxedHandleRecorder() : mOuter(tUnboxedHandleRecorder) {
+    tUnboxedHandleRecorder = this;
+}
+
+ScopedUnboxedHandleRecorder::~ScopedUnboxedHandleRecorder() { tUnboxedHandleRecorder = mOuter; }
+
+void ScopedUnboxedHandleRecorder::record(uint64_t boxed) {
+    if (std::find(mHandles.begin(), mHandles.end(), boxed) == mHandles.end()) {
+        mHandles.push_back(boxed);
+    }
+}
+
 template <typename VkObjectT>
 VkObjectT unbox_VkType(VkObjectT boxed) {
     if (boxed == VK_NULL_HANDLE) {
@@ -435,6 +451,14 @@ VkObjectT unbox_VkType(VkObjectT boxed) {
             unboxed = VK_NULL_HANDLE;
         } else {
             unboxed = (VkObjectT)info->underlying;
+            if constexpr (!(std::is_same_v<VkObjectT, VkCommandBuffer> ||
+                            std::is_same_v<VkObjectT, VkDevice> ||
+                            std::is_same_v<VkObjectT, VkInstance> ||
+                            std::is_same_v<VkObjectT, VkPhysicalDevice>)) {
+                if (tUnboxedHandleRecorder) {
+                    tUnboxedHandleRecorder->record((uint64_t)(uintptr_t)boxed);
+                }
+            }
         }
     }
 

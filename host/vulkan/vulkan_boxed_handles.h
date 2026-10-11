@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <mutex>
+#include <vector>
 
 #include "vulkan_dispatch.h"
 #include "vulkan_handles.h"
@@ -154,6 +155,24 @@ extern BoxedHandleManager sBoxedHandleManager;
 
 GOLDFISH_VK_LIST_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_DISPATCHABLE_HANDLE_API_DECL)
 GOLDFISH_VK_LIST_NON_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_API_DECL)
+
+// Records the boxed non-dispatchable handles unboxed on the constructing
+// thread while alive (deduplicated, in first-unbox order); an outer recorder
+// is suspended until this one is destroyed.
+class ScopedUnboxedHandleRecorder {
+   public:
+    ScopedUnboxedHandleRecorder();
+    ~ScopedUnboxedHandleRecorder();
+    ScopedUnboxedHandleRecorder(const ScopedUnboxedHandleRecorder&) = delete;
+    ScopedUnboxedHandleRecorder& operator=(const ScopedUnboxedHandleRecorder&) = delete;
+
+    const std::vector<uint64_t>& handles() const { return mHandles; }
+    void record(uint64_t boxed);
+
+   private:
+    std::vector<uint64_t> mHandles;
+    ScopedUnboxedHandleRecorder* mOuter;
+};
 
 }  // namespace vk
 }  // namespace host
