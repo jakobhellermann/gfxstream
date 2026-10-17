@@ -166,6 +166,46 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
             }
         }
     }
+    // A primary that executes a secondary without a replayable recording would
+    // replay vkCmdExecuteCommands on a buffer in the initial state.
+    std::map<uint64_t, std::set<uint64_t>> executedSecondaries;
+    std::set<uint64_t> recordedCmdBuffers;
+    for (const auto& [apiHandle, boxedCmd] : mSubDecodeApiCalls) {
+        const auto* info = mApiCallManager.get(apiHandle);
+        if (!info || info->packet.size() < 8) continue;
+        recordedCmdBuffers.insert(boxedCmd);
+        const auto& packet = info->packet;
+        uint32_t opcode;
+        memcpy(&opcode, packet.data(), sizeof(opcode));
+        if (opcode != OP_vkCmdExecuteCommands || packet.size() < 12) continue;
+        uint32_t count;
+        memcpy(&count, packet.data() + 8, sizeof(count));
+        if (count > (packet.size() - 12) / sizeof(uint64_t)) continue;
+        for (uint32_t i = 0; i < count; ++i) {
+            uint64_t secondary;
+            memcpy(&secondary, packet.data() + 12 + i * sizeof(secondary), sizeof(secondary));
+            executedSecondaries[boxedCmd].insert(secondary);
+        }
+    }
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (const auto& [primary, secondaries] : executedSecondaries) {
+            if (invalidRecordings.count(primary)) continue;
+            for (uint64_t secondary : secondaries) {
+                const bool replayable = mGraph.getDepNode(secondary) &&
+                                        recordedCmdBuffers.count(secondary) &&
+                                        !invalidRecordings.count(secondary);
+                if (replayable) continue;
+                invalidRecordings.emplace(primary, secondary);
+                GFXSTREAM_WARNING(
+                    "snapshot save: skip command buffer 0x%llx: executed secondary 0x%llx has "
+                    "no replayable recording",
+                    (unsigned long long)primary, (unsigned long long)secondary);
+                changed = true;
+                break;
+            }
+        }
+    }
     // Live command buffers whose recording is dropped; the loader flags them
     // so a submit without re-recording is reported instead of silently
     // executing an empty buffer.
@@ -220,11 +260,11 @@ void VkReconstruction::saveReplayBuffers(gfxstream::Stream* stream) {
             for (uint32_t i = 0; i < count; ++i) {
                 uint64_t secondary;
                 memcpy(&secondary, packet.data() + 12 + i * sizeof(secondary), sizeof(secondary));
-                if (recordings.count(secondary))
-                    dependencies[boxedCmd].push_back(secondary);
-                else
-                    GFXSTREAM_WARNING("snapshot save: secondary 0x%llx has no recording",
-                                      (unsigned long long)secondary);
+                if (!recordings.count(secondary)) {
+                    GFXSTREAM_FATAL("snapshot save: 0x%llx executes secondary 0x%llx without a recording",
+                                    (unsigned long long)boxedCmd, (unsigned long long)secondary);
+                }
+                dependencies[boxedCmd].push_back(secondary);
             }
         }
         dependencies.try_emplace(boxedCmd);
