@@ -146,6 +146,27 @@ EmulatedPhysicalDeviceMemoryProperties::EmulatedPhysicalDeviceMemoryProperties(
         });
     }
 
+    // Without direct mapping, flushes and invalidates are CPU copies through the host mapping:
+    // back host visible guest types with a host cached type where one exists.
+    if (!features.GlDirectMem.enabled() && !features.VirtioGpuNext.enabled()) {
+        for (EmulatedGuestMemoryType& guestType : mGuestMemoryTypes) {
+            const VkMemoryPropertyFlags hostFlags =
+                mHostMemoryProperties.memoryTypes[guestType.hostMemoryTypeIndex].propertyFlags;
+            if (!(hostFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) ||
+                (hostFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT)) {
+                continue;
+            }
+            const VkMemoryPropertyFlags cachedFlags = hostFlags | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            for (uint32_t i = 0; i < mHostMemoryProperties.memoryTypeCount; i++) {
+                if ((mHostMemoryProperties.memoryTypes[i].propertyFlags & cachedFlags) ==
+                    cachedFlags) {
+                    guestType.hostMemoryTypeIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
 #if defined(__APPLE__)
     const std::optional<uint32_t> hostDeviceLocalIndex =
         features.SystemBlob.enabled()
