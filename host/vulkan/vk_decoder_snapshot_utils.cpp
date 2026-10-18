@@ -90,6 +90,9 @@ VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
 
 constexpr uint32_t kBadImageSnapshot = 0xbaadbeef;
 constexpr uint32_t kGoodImageSnapshot = 0x900df00d;
+
+// Covers every access. Setting all bits instead includes reserved ones, which drivers may reject.
+constexpr VkAccessFlags kAllMemoryAccess = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
 }  // namespace
 SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock) {
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
@@ -282,7 +285,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             VkImageMemoryBarrier imgMemoryBarrier = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 .pNext = nullptr,
-                .srcAccessMask = static_cast<VkAccessFlags>(~VK_ACCESS_NONE_KHR),
+                .srcAccessMask = kAllMemoryAccess,
                 .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
                 .oldLayout = layoutBeforeSave,
                 .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -313,7 +316,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                 imgMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 imgMemoryBarrier.newLayout = layoutBeforeSave;
                 imgMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-                imgMemoryBarrier.dstAccessMask = ~VK_ACCESS_NONE_KHR;
+                imgMemoryBarrier.dstAccessMask = kAllMemoryAccess;
                 dispatch->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                                                nullptr, 1, &imgMemoryBarrier);
@@ -378,8 +381,8 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         VkImageMemoryBarrier imgMemoryBarrier = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
             .pNext = nullptr,
-            .srcAccessMask = static_cast<VkAccessFlags>(~VK_ACCESS_NONE_KHR),
-            .dstAccessMask = static_cast<VkAccessFlags>(~VK_ACCESS_NONE_KHR),
+            .srcAccessMask = kAllMemoryAccess,
+            .dstAccessMask = kAllMemoryAccess,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = imageInfo->layout,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -472,7 +475,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             VkImageMemoryBarrier imgMemoryBarrier = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 .pNext = nullptr,
-                .srcAccessMask = static_cast<VkAccessFlags>(~VK_ACCESS_NONE_KHR),
+                .srcAccessMask = kAllMemoryAccess,
                 .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -502,7 +505,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                 imgMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                 imgMemoryBarrier.newLayout = imageInfo->layout;
                 imgMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                imgMemoryBarrier.dstAccessMask = ~VK_ACCESS_NONE_KHR;
+                imgMemoryBarrier.dstAccessMask = kAllMemoryAccess;
                 dispatch->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                                                nullptr, 1, &imgMemoryBarrier);
@@ -686,7 +689,7 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     VkBufferMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
                                   .pNext = nullptr,
                                   .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-                                  .dstAccessMask = static_cast<VkAccessFlags>(~VK_ACCESS_NONE_KHR),
+                                  .dstAccessMask = kAllMemoryAccess,
                                   .srcQueueFamilyIndex = 0xFFFFFFFF,
                                   .dstQueueFamilyIndex = 0xFFFFFFFF,
                                   .buffer = buffer,
