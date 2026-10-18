@@ -68,9 +68,9 @@ uint32_t GetReadbackMemoryType(const PhysicalDeviceInfo& physicalDevice,
 
 VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
     return VkExtent3D{
-        .width = baseExtent.width >> mipLevel,
-        .height = baseExtent.height >> mipLevel,
-        .depth = baseExtent.depth,
+        .width = std::max(1u, baseExtent.width >> mipLevel),
+        .height = std::max(1u, baseExtent.height >> mipLevel),
+        .depth = std::max(1u, baseExtent.depth >> mipLevel),
     };
 }
 
