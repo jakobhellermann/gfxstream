@@ -7458,7 +7458,10 @@ class VkDecoderGlobalState::Impl {
                 }
 
                 sharedMemory = std::make_optional<SharedMemory>(std::move(memory));
-            } else if (m_vkEmulation->getFeatures().ExternalBlob.enabled()) {
+            } else if (m_vkEmulation->getFeatures().ExternalBlob.enabled() &&
+                       usingDirectMapping()) {
+                // Exported for the guest to map. Without direct mapping the guest never maps
+                // it, and drivers may refuse exportable host visible memory (dzn).
                 VkExternalMemoryHandleTypeFlags handleTypes =
                     m_vkEmulation->getDefaultExternalMemoryHandleType();
 #ifdef __linux__
