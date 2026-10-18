@@ -130,6 +130,9 @@ struct vulkanCapset {
     uint32_t vulkanBatchedDescriptorSetUpdate;
     uint32_t hasTraceAsyncCommand;
     uint32_t hasSetMetadataCommand;
+    // Host visible memory is a guest shadow kept in sync by copying flushed and invalidated
+    // ranges through the command stream, instead of a mapping shared with the host.
+    uint32_t hostVisibleMemoryCopy;
 };
 
 struct glesCapset {

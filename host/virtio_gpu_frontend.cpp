@@ -655,7 +655,11 @@ void VirtioGpuFrontend::fillCaps(uint32_t set, void* caps) {
             if (fb->hasEmulationVk()) {
                 const auto info = fb->getRepresentativeColorBufferMemoryTypeInfo();
                 capset->colorBufferMemoryIndex = info.guestMemoryTypeIndex;
-                capset->deferredMapping = 1;
+                if (mFeatures.GlDirectMem.enabled() || mFeatures.VirtioGpuNext.enabled()) {
+                    capset->deferredMapping = 1;
+                } else {
+                    capset->hostVisibleMemoryCopy = 1;
+                }
             }
 
             if (mFeatures.VulkanBatchedDescriptorSetUpdate.enabled()) {
