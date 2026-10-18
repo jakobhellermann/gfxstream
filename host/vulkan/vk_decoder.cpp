@@ -1890,6 +1890,22 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
                     // where usingDirectMapping fails to set the proper packet size,;
                     // meaning we can read off the end of the packet.;
                     uint64_t sizeLeft = end - *readStreamPtrPtr;
+                    const uint8_t* scanPtr = *readStreamPtrPtr;
+                    uint64_t scanLeft = sizeLeft;
+                    for (uint32_t i = 0; i < memoryRangeCount; ++i) {
+                        uint64_t scanSize = 0;
+                        if (scanLeft >= sizeof(uint64_t)) {
+                            memcpy(&scanSize, scanPtr, sizeof(uint64_t));
+                        }
+                        if (scanLeft < sizeof(uint64_t) || scanLeft - sizeof(uint64_t) < scanSize) {
+                            if (m_prevSeqno) {
+                                m_prevSeqno = m_prevSeqno.value() - 1;
+                            }
+                            return ptr - (unsigned char*)buf;
+                        }
+                        scanPtr += sizeof(uint64_t) + scanSize;
+                        scanLeft -= sizeof(uint64_t) + scanSize;
+                    }
                     for (uint32_t i = 0; i < memoryRangeCount; ++i) {
                         if (sizeLeft < sizeof(uint64_t)) {
                             if (m_prevSeqno) {
