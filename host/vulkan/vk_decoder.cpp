@@ -1913,8 +1913,17 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
                             return ptr - (unsigned char*)buf;
                         }
                         sizeLeft -= readStream;
-                        uint8_t* targetRange = hostPtr + offset;
-                        memcpy(targetRange, *readStreamPtrPtr, readStream);
+                        auto memorySize = m_state->getDeviceMemorySize(memory);
+                        if (offset > memorySize || readStream > memorySize - offset) {
+                            GFXSTREAM_ERROR(
+                                "vkFlushMappedMemoryRanges: dropping out-of-bounds guest range "
+                                "[offset %llu, size %llu] for memory size %llu",
+                                (unsigned long long)offset, (unsigned long long)readStream,
+                                (unsigned long long)memorySize);
+                        } else {
+                            uint8_t* targetRange = hostPtr + offset;
+                            memcpy(targetRange, *readStreamPtrPtr, readStream);
+                        }
                         *readStreamPtrPtr += readStream;
                         packetLen += 8 + readStream;
                     }
@@ -1971,7 +1980,8 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
                 }
                 if (m_logCalls) {
                     GFXSTREAM_INFO(
-                        "stream %p: call vkInvalidateMappedMemoryRanges 0x%llx 0x%llx 0x%llx ",
+                        "stream %p: call vkInvalidateMappedMemoryRanges 0x%llx "
+                        "0x%llx 0x%llx ",
                         ioStream, (unsigned long long)device, (unsigned long long)memoryRangeCount,
                         (unsigned long long)pMemoryRanges);
                 }
@@ -1993,13 +2003,25 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream,
                         auto size = range.size;
                         auto offset = range.offset;
                         auto hostPtr = m_state->getMappedHostPointer(memory);
-                        auto actualSize =
-                            size == VK_WHOLE_SIZE ? m_state->getDeviceMemorySize(memory) : size;
+                        auto memorySize = m_state->getDeviceMemorySize(memory);
+                        auto actualSize = size == VK_WHOLE_SIZE
+                                              ? (offset <= memorySize ? memorySize - offset : 0)
+                                              : size;
                         uint64_t writeStream = 0;
                         if (!hostPtr) {
                             vkStream->write(&writeStream, sizeof(uint64_t));
                             continue;
                         };
+                        if (offset > memorySize || actualSize > memorySize - offset) {
+                            GFXSTREAM_ERROR(
+                                "vkInvalidateMappedMemoryRanges: dropping "
+                                "out-of-bounds guest range "
+                                "[offset %llu, size %llu] for memory size %llu",
+                                (unsigned long long)offset, (unsigned long long)actualSize,
+                                (unsigned long long)memorySize);
+                            vkStream->write(&writeStream, sizeof(uint64_t));
+                            continue;
+                        }
                         uint8_t* targetRange = hostPtr + offset;
                         writeStream = actualSize;
                         vkStream->write(&writeStream, sizeof(uint64_t));
