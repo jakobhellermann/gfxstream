@@ -11050,16 +11050,13 @@ class VkDecoderGlobalState::Impl {
             }
         }
 
-        if (m_vkEmulation->supportsExternalMemoryCapabilities()) {
-            res.push_back(VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME);
-        }
-
-        if (m_vkEmulation->supportsExternalSemaphoreCapabilities()) {
-            res.push_back(VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME);
-        }
-
-        if (m_vkEmulation->supportsExternalFenceCapabilities()) {
-            res.push_back(VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME);
+        // The capabilities may be core only, so enable the extensions just where they exist.
+        for (const char* extName : {VK_KHR_EXTERNAL_MEMORY_CAPABILITIES_EXTENSION_NAME,
+                                    VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME,
+                                    VK_KHR_EXTERNAL_FENCE_CAPABILITIES_EXTENSION_NAME}) {
+            if (m_vkEmulation->hasInstanceExtension(extName)) {
+                res.push_back(extName);
+            }
         }
 
         if (m_vkEmulation->debugUtilsEnabled()) {

@@ -223,6 +223,7 @@ class VkEmulation {
     std::string getGpuDriverInfo() const;
     std::string getGpuVersionString() const;
     std::string getInstanceExtensionsString() const;
+    bool hasInstanceExtension(const char* name) const;
     std::string getDeviceExtensionsString() const;
     bool getVulkanEmulationDeviceInfo(char** device_name, char** driver_info,
                                       uint32_t* driver_version, uint32_t* api_version,

@@ -1017,19 +1017,25 @@ std::unique_ptr<VkEmulation> VkEmulation::create(VulkanDispatch* gvk,
     emulation->mVulkanApiVersionInUse = appInfo.apiVersion;
     emulation->mVulkanInstanceVersion = maxInstanceVersion;
 
+    // The capability extensions are core in Vulkan 1.1. A loader whose only ICD exposes them
+    // just as core (dzn) does not list the extensions at all.
+    const bool instanceCore11 = appInfo.apiVersion >= VK_MAKE_VERSION(1, 1, 0);
+
     // https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkPhysicalDeviceIDProperties.html
     // Provided by VK_VERSION_1_1, or VK_KHR_external_fence_capabilities, VK_KHR_external_memory_capabilities,
     // VK_KHR_external_semaphore_capabilities
-    emulation->mInstanceSupportsPhysicalDeviceIDProperties = externalFenceCapabilitiesSupported ||
-                                                             externalMemoryCapabilitiesSupported ||
-                                                             externalSemaphoreCapabilitiesSupported;
+    emulation->mInstanceSupportsPhysicalDeviceIDProperties =
+        instanceCore11 || externalFenceCapabilitiesSupported ||
+        externalMemoryCapabilitiesSupported || externalSemaphoreCapabilitiesSupported;
 
     emulation->mInstanceSupportsGetPhysicalDeviceProperties2 =
-        getPhysicalDeviceProperties2Supported;
-    emulation->mInstanceSupportsExternalMemoryCapabilities = externalMemoryCapabilitiesSupported;
+        instanceCore11 || getPhysicalDeviceProperties2Supported;
+    emulation->mInstanceSupportsExternalMemoryCapabilities =
+        instanceCore11 || externalMemoryCapabilitiesSupported;
     emulation->mInstanceSupportsExternalSemaphoreCapabilities =
-        externalSemaphoreCapabilitiesSupported;
-    emulation->mInstanceSupportsExternalFenceCapabilities = externalFenceCapabilitiesSupported;
+        instanceCore11 || externalSemaphoreCapabilitiesSupported;
+    emulation->mInstanceSupportsExternalFenceCapabilities =
+        instanceCore11 || externalFenceCapabilitiesSupported;
     emulation->mInstanceSupportsSurface = surfaceSupported;
 #if defined(__APPLE__)
     emulation->mInstanceSupportsMoltenVK = useMoltenVK;
@@ -1984,6 +1990,10 @@ std::string VkEmulation::getGpuVersionString() const {
             << VK_API_VERSION_PATCH(mVulkanInstanceVersion) << ", "  //
             << getGpuDriverInfo() << ", " << getGpuDriverVersion();
     return builder.str();
+}
+
+bool VkEmulation::hasInstanceExtension(const char* name) const {
+    return vk_util::extensionSupported(mInstanceExtensions, name);
 }
 
 std::string VkEmulation::getInstanceExtensionsString() const {
