@@ -7520,9 +7520,10 @@ class VkDecoderGlobalState::Impl {
         // When external blobs are off, we always want to map HOST_VISIBLE memory. Because, we run
         // in the same process as the guest.
         // When external blobs are on, we want to map memory only if a workaround is using it in
-        // the gfxstream process. This happens when ASTC CPU emulation is on.
+        // the gfxstream process. This happens when ASTC CPU emulation is on. Without direct
+        // mapping, flushes and invalidates copy through this host mapping.
         bool needToMap =
-            (!m_vkEmulation->getFeatures().ExternalBlob.enabled() ||
+            (!m_vkEmulation->getFeatures().ExternalBlob.enabled() || !usingDirectMapping() ||
              (deviceInfo->useAstcCpuDecompression && deviceInfo->emulateTextureAstc)) &&
             !createBlobInfoPtr;
 
