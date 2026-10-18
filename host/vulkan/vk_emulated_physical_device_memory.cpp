@@ -104,7 +104,9 @@ EmulatedPhysicalDeviceMemoryProperties::EmulatedPhysicalDeviceMemoryProperties(
         }
     }
 
-    if (features.VulkanEnsureCachedCoherentMemoryAvailable.enabled()) {
+    // Without direct mapping no guest type is coherent, there is nothing to mark cached.
+    if (features.VulkanEnsureCachedCoherentMemoryAvailable.enabled() &&
+        (features.GlDirectMem.enabled() || features.VirtioGpuNext.enabled())) {
         /* Some app layers (i.e. Angle) require *some* coherent-cached memory to be
          *  available. To ensure compatiblity these guest layers, when coherent-cached
          *  memory type is unavailable, append the cached bit to the first coherent
