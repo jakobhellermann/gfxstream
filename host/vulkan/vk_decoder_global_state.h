@@ -79,6 +79,8 @@ class VkDecoderGlobalState {
 
     // Snapshot save/load
     bool snapshotsEnabled() const;
+    // TEMP: logs recent queue submits; the caller holds the global state lock (save/load).
+    void logSnapshotStallLocked();
     bool isSnapshotCurrentlyLoading() const;
 
     bool batchedDescriptorSetUpdateEnabled() const;

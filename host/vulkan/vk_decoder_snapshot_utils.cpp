@@ -16,6 +16,7 @@
 
 #include "gfxstream/common/logging.h"
 #include "vk_common_operations.h"
+#include "vk_decoder_global_state.h"
 #include "vk_utils.h"
 #include "vulkan_boxed_handles.h"
 
@@ -67,6 +68,16 @@ uint32_t GetReadbackMemoryType(const PhysicalDeviceInfo& physicalDevice,
     }
     return GetMemoryType(physicalDevice, memoryRequirements,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+
+VkResult waitForSnapshotTransfer(StateBlock* stateBlock, VkFence fence) {
+    VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    VkResult result = dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 500000000L);
+    if (result == VK_TIMEOUT) {
+        VkDecoderGlobalState::get()->logSnapshotStallLocked();
+        result = dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 2500000000L);
+    }
+    return result;
 }
 
 VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
@@ -307,8 +318,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_RETURN_FALSE_ON_ERROR(
-        dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
+    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, staging->fence));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
 
     regionBase = 0;
@@ -382,8 +392,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             .pCommandBuffers = &commandBuffer,
         };
         VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-        VK_RETURN_FALSE_ON_ERROR(
-            dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
+        VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, fence));
         return true;
     }
     // Region bases match the save path's.
@@ -496,8 +505,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    VK_RETURN_FALSE_ON_ERROR(
-        dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
+    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, fence));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
     return true;
 }
@@ -554,8 +562,7 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_RETURN_FALSE_ON_ERROR(
-        dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
+    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, staging->fence));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
     stream->putBe64(bufferInfo->size);
     stream->write(staging->mapped, bufferInfo->size);
@@ -678,8 +685,7 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_RETURN_FALSE_ON_ERROR(
-        dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
+    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, staging->fence));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
     return true;
 }

@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <deque>
 #include <functional>
 #include <list>
 #include <memory>
@@ -457,6 +458,44 @@ class VkDecoderGlobalState::Impl {
         }
     }
 
+    void logSnapshotStallLocked() REQUIRES(mMutex) {
+        auto semaphores = [&](const std::vector<VkSemaphore>& list) {
+            std::string out;
+            for (VkSemaphore semaphore : list) {
+                const auto* info = gfxstream::base::find(mSemaphoreInfo, semaphore);
+                char item[96];
+                snprintf(item, sizeof(item), " %p(%s)", info ? (void*)info->boxed : (void*)semaphore,
+                         !info                       ? "destroyed"
+                         : info->isTimelineSemaphore ? "timeline"
+                         : info->isSignaled          ? "signaled"
+                                                     : "unsignaled");
+                out += item;
+            }
+            return out;
+        };
+        GFXSTREAM_ERROR("Snapshot transfer still pending after 500 ms; the last %zu submits:",
+                        mRecentSubmits.size());
+        for (const auto& recent : mRecentSubmits) {
+            std::string commandBuffers;
+            for (VkCommandBuffer commandBuffer : recent.commandBuffers) {
+                const auto* info = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
+                char item[96];
+                snprintf(item, sizeof(item), " %p(%s%s)",
+                         info ? (void*)info->boxed : (void*)commandBuffer,
+                         !info                            ? "freed"
+                         : info->recordedCommands.empty() ? "no recording"
+                                                          : "recorded",
+                         info && mDroppedRecordings.count((uint64_t)(uintptr_t)info->boxed)
+                             ? ", dropped on load"
+                             : "");
+                commandBuffers += item;
+            }
+            GFXSTREAM_ERROR("  queue %p waits:%s signals:%s command buffers:%s", recent.queue,
+                            semaphores(recent.waits).c_str(), semaphores(recent.signals).c_str(),
+                            commandBuffers.c_str());
+        }
+    }
+
     void saveCommandBufferRecordings(gfxstream::Stream* stream) REQUIRES(mMutex) {
         std::vector<VkCommandBuffer> sortedBoxedCommandBuffers;
         for (const auto& [commandBuffer, commandBufferInfo] : mCommandBufferInfo) {
@@ -510,6 +549,10 @@ class VkDecoderGlobalState::Impl {
             .gfxApiLogger = &gfxLogger,
         };
         std::unordered_set<uint64_t> replayed;
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mDroppedRecordings.clear();
+        }
         const uint64_t count = stream->getBe64();
         uint64_t dropped = 0;
         for (uint64_t i = 0; i < count; i++) {
@@ -542,6 +585,8 @@ class VkDecoderGlobalState::Impl {
                     ", it uses the destroyed handle 0x%" PRIx64,
                     boxed, *destroyed);
                 dropped++;
+                std::lock_guard<std::mutex> lock(mMutex);
+                mDroppedRecordings.insert(boxed);
                 continue;
             }
             auto unrecorded = std::find_if(
@@ -553,6 +598,8 @@ class VkDecoderGlobalState::Impl {
                     ", it executes VkCommandBuffer 0x%" PRIx64 " without a recording",
                     boxed, *unrecorded);
                 dropped++;
+                std::lock_guard<std::mutex> lock(mMutex);
+                mDroppedRecordings.insert(boxed);
                 continue;
             }
 
@@ -8657,6 +8704,22 @@ class VkDecoderGlobalState::Impl {
                     }
                 }
             }
+            for (uint32_t i = 0; i < submitCount; i++) {
+                RecentSubmit recent{.queue = queue};
+                for (uint32_t j = 0; j < getWaitSemaphoreCount(pSubmits[i]); j++) {
+                    recent.waits.push_back(getWaitSemaphore(pSubmits[i], j));
+                }
+                for (uint32_t j = 0; j < getSignalSemaphoreCount(pSubmits[i]); j++) {
+                    recent.signals.push_back(getSignalSemaphore(pSubmits[i], j));
+                }
+                for (int j = 0; j < getCommandBufferCount(pSubmits[i]); j++) {
+                    recent.commandBuffers.push_back(getCommandBuffer(pSubmits[i], j));
+                }
+                mRecentSubmits.push_back(std::move(recent));
+                if (mRecentSubmits.size() > 16) {
+                    mRecentSubmits.pop_front();
+                }
+            }
             // Update latestUse for all wait/signal semaphores, to ensure that they
             // are never asynchronously destroyed before the queue submissions referencing
             // them have completed
@@ -11820,6 +11883,16 @@ class VkDecoderGlobalState::Impl {
 
     // Info tracking for vulkan objects
     std::unordered_map<VkInstance, InstanceInfo> mInstanceInfo GUARDED_BY(mMutex);
+
+    // TEMP diagnostics for snapshot transfers that never complete.
+    struct RecentSubmit {
+        VkQueue queue;
+        std::vector<VkSemaphore> waits;
+        std::vector<VkSemaphore> signals;
+        std::vector<VkCommandBuffer> commandBuffers;
+    };
+    std::deque<RecentSubmit> mRecentSubmits GUARDED_BY(mMutex);
+    std::unordered_set<uint64_t> mDroppedRecordings GUARDED_BY(mMutex);
     std::unordered_map<VkPhysicalDevice, PhysicalDeviceInfo> mPhysdevInfo GUARDED_BY(mMutex);
     std::unordered_map<VkDevice, DeviceInfo> mDeviceInfo GUARDED_BY(mMutex);
 
@@ -11969,6 +12042,10 @@ void VkDecoderGlobalState::reset() {
 
 // Snapshots
 bool VkDecoderGlobalState::snapshotsEnabled() const { return mImpl->snapshotsEnabled(); }
+
+void VkDecoderGlobalState::logSnapshotStallLocked() NO_THREAD_SAFETY_ANALYSIS {
+    mImpl->logSnapshotStallLocked();
+}
 bool VkDecoderGlobalState::batchedDescriptorSetUpdateEnabled() const { return mImpl->batchedDescriptorSetUpdateEnabled(); }
 
 uint64_t VkDecoderGlobalState::newGlobalVkGenericHandle(BoxedHandleTypeTag typeTag) {
