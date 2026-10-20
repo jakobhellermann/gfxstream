@@ -51,6 +51,24 @@ uint32_t GetMemoryType(const PhysicalDeviceInfo& physicalDevice,
     return -1;
 }
 
+// Snapshot save reads the staged content back on the CPU, which is slow from the write-combined
+// mappings drivers commonly use for uncached host visible memory.
+uint32_t GetReadbackMemoryType(const PhysicalDeviceInfo& physicalDevice,
+                               const VkMemoryRequirements& memoryRequirements) {
+    const VkMemoryPropertyFlags cached = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+    const auto& props = physicalDevice.memoryPropertiesHelper->getHostMemoryProperties();
+    for (uint32_t i = 0; i < props.memoryTypeCount; i++) {
+        if ((memoryRequirements.memoryTypeBits & (1 << i)) &&
+            (props.memoryTypes[i].propertyFlags & cached) == cached) {
+            return i;
+        }
+    }
+    return GetMemoryType(physicalDevice, memoryRequirements,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+}
+
 VkExtent3D getMipmapExtent(VkExtent3D baseExtent, uint32_t mipLevel) {
     return VkExtent3D{
         .width = std::max<uint32_t>(baseExtent.width >> mipLevel, 1u),
@@ -116,8 +134,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage
                                             &readbackBufferMemoryRequirements);
 
     const auto readbackBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
     // Staging memory
     // TODO(b/323064243): reuse staging memory
     VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
@@ -468,8 +485,7 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuff
                                             &readbackBufferMemoryRequirements);
 
     const auto readbackBufferMemoryType =
-        GetMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements,
-                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        GetReadbackMemoryType(*stateBlock->physicalDeviceInfo, readbackBufferMemoryRequirements);
     // Staging memory
     // TODO(b/323064243): reuse staging memory
     VkMemoryAllocateInfo readbackBufferMemoryAllocateInfo = {
