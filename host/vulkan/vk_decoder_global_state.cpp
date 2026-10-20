@@ -1162,8 +1162,33 @@ class VkDecoderGlobalState::Impl {
             }
 
             // Set up VK structs to snapshot other Vulkan objects
-            // TODO(b/323064243): group all images from the same device and reuse queue / command
-            // pool
+            std::unordered_map<VkDevice, StateBlock> snapshotStateBlocks;
+            std::unordered_map<VkDevice, SnapshotStagingContext> snapshotStagings;
+            auto snapshotScratchFor = [&](VkDevice device) {
+                struct Scratch {
+                    StateBlock* stateBlock;
+                    SnapshotStagingContext* staging;
+                };
+                auto stateBlockIt = snapshotStateBlocks.find(device);
+                if (stateBlockIt == snapshotStateBlocks.end()) {
+                    stateBlockIt =
+                        snapshotStateBlocks.emplace(device, createSnapshotStateBlock(device)).first;
+                    snapshotStagings.emplace(device,
+                                             createSnapshotStagingContext(&stateBlockIt->second));
+                }
+                return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second};
+            };
+            auto releaseSnapshotScratch = [&]() {
+                for (auto& [device, staging] : snapshotStagings) {
+                    auto stateBlockIt = snapshotStateBlocks.find(device);
+                    if (stateBlockIt != snapshotStateBlocks.end()) {
+                        destroySnapshotStagingContext(&stateBlockIt->second, &staging);
+                    }
+                }
+                for (auto& [device, stateBlock] : snapshotStateBlocks) {
+                    releaseSnapshotStateBlock(&stateBlock);
+                }
+            };
 
             GFXSTREAM_DEBUG("snapshot load: image content");
             std::vector<VkImage> sortedBoxedImages;
@@ -1194,13 +1219,13 @@ class VkDecoderGlobalState::Impl {
                 // TODO(b/323059453): fix corner cases when image contents cannot be properly
                 // loaded.
                 imageInfo.layout = static_cast<VkImageLayout>(stream->getBe32());
-                StateBlock stateBlock = createSnapshotStateBlock(imageInfo.device);
+                auto scratch = snapshotScratchFor(imageInfo.device);
                 // TODO(b/294277842): make sure the queue is empty before using.
-                if (!loadImageContent(stream, &stateBlock, unboxedImage, &imageInfo)) {
-                    releaseSnapshotStateBlock(&stateBlock);
+                if (!loadImageContent(stream, scratch.stateBlock, scratch.staging, unboxedImage,
+                                      &imageInfo)) {
+                    releaseSnapshotScratch();
                     return false;
                 }
-                releaseSnapshotStateBlock(&stateBlock);
             }
 
             // snapshot buffers
@@ -1218,14 +1243,15 @@ class VkDecoderGlobalState::Impl {
                     continue;
                 }
                 // TODO: add a special case for host mapped memory
-                StateBlock stateBlock = createSnapshotStateBlock(bufferInfo.device);
+                auto scratch = snapshotScratchFor(bufferInfo.device);
                 // TODO(b/294277842): make sure the queue is empty before using.
-                if (!loadBufferContent(stream, &stateBlock, unboxedBuffer, &bufferInfo)) {
-                    releaseSnapshotStateBlock(&stateBlock);
+                if (!loadBufferContent(stream, scratch.stateBlock, scratch.staging, unboxedBuffer,
+                                       &bufferInfo)) {
+                    releaseSnapshotScratch();
                     return false;
                 }
-                releaseSnapshotStateBlock(&stateBlock);
             }
+            releaseSnapshotScratch();
 
             // snapshot descriptors
             GFXSTREAM_DEBUG("snapshot load: descriptors");
