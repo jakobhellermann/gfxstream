@@ -1221,9 +1221,20 @@ class VkDecoderGlobalState::Impl {
                     }
                 }
                 std::vector<uint32_t> whichPool(poolIds.size(), 0);
-                // no need to allocate descriptors as this is not batched
-                // all the descriptors are already allocated
+                // With batched updates the guest allocates its sets through the commit, which
+                // the replay does not run: allocate the saved sets without a host set.
                 std::vector<uint32_t> pendingAlloc(poolIds.size(), false);
+                if (m_vkEmulation->getFeatures().VulkanBatchedDescriptorSetUpdate.enabled()) {
+                    for (size_t i = 0; i < poolIds.size(); i++) {
+                        BoxedHandleInfo* setHandleInfo = sBoxedHandleManager.get(poolIds[i]);
+                        if (!setHandleInfo) {
+                            GFXSTREAM_ERROR("Snapshot load failure: unknown descriptor set 0x%" PRIx64,
+                                            poolIds[i]);
+                            return false;
+                        }
+                        pendingAlloc[i] = !setHandleInfo->underlying;
+                    }
+                }
 
                 const auto& device = poolInfo.device;
                 const auto& deviceInfo = gfxstream::base::find(mDeviceInfo, device);
