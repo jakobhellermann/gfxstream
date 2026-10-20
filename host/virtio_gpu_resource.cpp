@@ -1029,8 +1029,12 @@ std::optional<VirtioGpuResourceSnapshot> VirtioGpuResource::Snapshot() const {
         const auto& snapshotDescriptorInfo = resourceSnapshot.external_memory_descriptor();
         if (snapshotDescriptorInfo.has_context_id()) {
             resource.mCreateContextId = snapshotDescriptorInfo.context_id();
-            auto descriptorInfoOpt = ExternalObjectManager::get()->removeBlobDescriptorInfo(
-                snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
+            // Buffer blobs export the Buffer FrameBuffer recreated on load.
+            auto descriptorInfoOpt =
+                resource.mResourceType == VirtioGpuResourceType::BUFFER
+                    ? FrameBuffer::getFB()->exportBuffer(resource.mId)
+                    : ExternalObjectManager::get()->removeBlobDescriptorInfo(
+                          snapshotDescriptorInfo.context_id(), snapshotDescriptorInfo.blob_id());
             if (!descriptorInfoOpt) {
                 GFXSTREAM_ERROR("Failed to restore resource: failed to find blob descriptor info.");
                 return std::nullopt;

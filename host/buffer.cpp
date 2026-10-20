@@ -99,7 +99,8 @@ std::unique_ptr<Buffer::Impl> Buffer::Impl::create(gl::EmulationGl* emulationGl,
 }
 
 /*static*/
-std::unique_ptr<Buffer::Impl> Buffer::Impl::onLoad(gl::EmulationGl* emulationGl, vk::VkEmulation*,
+std::unique_ptr<Buffer::Impl> Buffer::Impl::onLoad(gl::EmulationGl* emulationGl,
+                                                   vk::VkEmulation* emulationVk,
                                                    gfxstream::Stream* stream) {
     const auto handle = static_cast<HandleType>(stream->getBe32());
     const auto size = static_cast<uint64_t>(stream->getBe64());
@@ -115,6 +116,15 @@ std::unique_ptr<Buffer::Impl> Buffer::Impl::onLoad(gl::EmulationGl* emulationGl,
         }
     }
 #endif
+
+    if (emulationVk) {
+        buffer->mBufferVk =
+            vk::BufferVk::create(*emulationVk, handle, size, emulationGl == nullptr);
+        if (!buffer->mBufferVk) {
+            GFXSTREAM_ERROR("Failed to load BufferVk.");
+            return nullptr;
+        }
+    }
 
     buffer->mNeedRestore = true;
 

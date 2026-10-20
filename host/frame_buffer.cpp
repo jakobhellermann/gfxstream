@@ -3335,6 +3335,10 @@ bool FrameBuffer::Impl::onSave(Stream* stream,
             return false;
         }
     }
+    stream->putBe32(m_buffers.size());
+    for (const auto& [handle, ref] : m_buffers) {
+        ref.buffer->onSave(stream);
+    }
     stream->putBe32(m_lastPostedColorBuffer);
 #if GFXSTREAM_ENABLE_HOST_GLES
     if (m_emulationGl) {
@@ -3591,6 +3595,21 @@ bool FrameBuffer::Impl::onLoad(Stream* stream,
             return false;
         }
         GFXSTREAM_DEBUG("snapshot load: %zu color buffers loaded", m_colorbuffers.size());
+    }
+    {
+        GFXSTREAM_DEBUG("snapshot load: load buffers");
+        m_buffers.clear();
+        const uint32_t bufferCount = stream->getBe32();
+        for (uint32_t i = 0; i < bufferCount; i++) {
+            BufferPtr buffer = Buffer::onLoad(m_emulationGl.get(), m_emulationVk.get(), stream);
+            if (!buffer) {
+                GFXSTREAM_ERROR("snapshot load: could not load buffer %u", i);
+                return false;
+            }
+            const HandleType handle = buffer->getHndl();
+            m_buffers[handle] = {std::move(buffer)};
+        }
+        GFXSTREAM_DEBUG("snapshot load: %u buffers loaded", bufferCount);
     }
     m_lastPostedColorBuffer = static_cast<HandleType>(stream->getBe32());
     GFXSTREAM_DEBUG("Got lasted posted color buffer from snapshot");
