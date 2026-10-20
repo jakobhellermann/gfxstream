@@ -733,3 +733,9 @@ option(
   ],
   description : 'Which portions of gfxstream to build'
 )
+option(
+  'snapshot',
+  type : 'feature',
+  value : 'disabled',
+  description : 'Snapshot and restore of the virtio-gpu frontend, needs protobuf'
+)

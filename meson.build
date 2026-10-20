@@ -4,7 +4,7 @@
 project('gfxstream', 'cpp', 'c',
          version : '0.1.2',
          license : 'Apache-2.0',
-         default_options : ['cpp_std=gnu++17',
+         default_options : ['cpp_std=gnu++20',
                             'b_ndebug=if-release'])
 
 cc = meson.get_compiler('cpp')

@@ -147,6 +147,35 @@ endif
 
 deps_gfxstream_backend = []
 
+if get_option('snapshot').enabled()
+  snapshot_protos = [
+    'virtio_gpu_context_snapshot',
+    'virtio_gpu_frontend_snapshot',
+    'virtio_gpu_resource_snapshot',
+    'virtio_gpu_ring_blob_snapshot',
+    'virtio_gpu_timelines_snapshot',
+  ]
+  snapshot_proto_inputs = []
+  snapshot_proto_outputs = []
+  foreach proto : snapshot_protos
+    snapshot_proto_inputs += files(proto + '.proto')
+    snapshot_proto_outputs += [proto + '.pb.cc', proto + '.pb.h']
+  endforeach
+  files_lib_gfxstream_backend += custom_target(
+    'gfxstream_snapshot_protos',
+    input : snapshot_proto_inputs,
+    output : snapshot_proto_outputs,
+    command : [find_program('protoc'), '--proto_path=@CURRENT_SOURCE_DIR@',
+               '--cpp_out=@OUTDIR@', '@INPUT@'],
+  )
+  inc_gfxstream_backend += inc_stream_servers
+  deps_gfxstream_backend += dependency('protobuf')
+  gfxstream_backend_cpp_args += [
+    '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_SUPPORT=1',
+    '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT=1',
+  ]
+endif
+
 link_args_gfxstream_backend = []
 
 if host_machine.system() == 'linux'
