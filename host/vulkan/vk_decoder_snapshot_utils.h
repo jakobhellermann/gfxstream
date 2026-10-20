@@ -27,11 +27,30 @@ struct StateBlock {
     VkQueue queue;
     VkCommandPool commandPool;
 };
-bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage image,
+
+// Staging buffer, command buffer and fence shared by the snapshot transfers of one device.
+struct SnapshotStagingContext {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    void* mapped = nullptr;
+    VkDeviceSize capacity = 0;
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    VkFence fence = VK_NULL_HANDLE;
+};
+
+SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock);
+void destroySnapshotStagingContext(StateBlock* stateBlock,
+                                   SnapshotStagingContext* staging);
+bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContext* staging,
+                                  VkDeviceSize needed);
+
+bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                      SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo);
 bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkImage image,
                       const ImageInfo* imageInfo);
-bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock, VkBuffer buffer,
+bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
+                       SnapshotStagingContext* staging, VkBuffer buffer,
                        const BufferInfo* bufferInfo);
 
 void setEventInQueue(StateBlock* stateBlock, VkEvent event, uint64_t eventflags);
