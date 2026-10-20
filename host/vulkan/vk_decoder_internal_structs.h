@@ -630,8 +630,14 @@ struct CommandBufferInfo {
     std::unordered_set<VkEvent> eventsSet;
     std::unordered_set<VkEvent> eventsReset;
 
+    // The deferred commands of the current recording and the boxed handles they unbox.
+    std::vector<uint8_t> recordedCommands;
+    std::vector<uint64_t> recordedHandles;
+
     void reset() {
         subCmds.clear();
+        recordedCommands.clear();
+        recordedHandles.clear();
         computePipeline = VK_NULL_HANDLE;
         firstSet = 0;
         descriptorLayout = VK_NULL_HANDLE;

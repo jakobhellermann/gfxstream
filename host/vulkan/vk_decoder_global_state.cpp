@@ -457,6 +457,117 @@ class VkDecoderGlobalState::Impl {
         }
     }
 
+    void saveCommandBufferRecordings(gfxstream::Stream* stream) REQUIRES(mMutex) {
+        std::vector<VkCommandBuffer> sortedBoxedCommandBuffers;
+        for (const auto& [commandBuffer, commandBufferInfo] : mCommandBufferInfo) {
+            sortedBoxedCommandBuffers.push_back(commandBufferInfo.boxed);
+        }
+        sort(sortedBoxedCommandBuffers.begin(), sortedBoxedCommandBuffers.end());
+
+        // Executed secondaries go before the primaries that record them.
+        std::vector<const CommandBufferInfo*> recordings;
+        std::unordered_set<VkCommandBuffer> visited;
+        std::function<void(VkCommandBuffer)> visit = [&](VkCommandBuffer commandBuffer) {
+            if (!visited.insert(commandBuffer).second) return;
+            const auto* commandBufferInfo = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
+            if (!commandBufferInfo) return;
+            for (VkCommandBuffer subCommandBuffer : commandBufferInfo->subCmds) {
+                visit(subCommandBuffer);
+            }
+            if (!commandBufferInfo->recordedCommands.empty()) {
+                recordings.push_back(commandBufferInfo);
+            }
+        };
+        for (VkCommandBuffer boxed : sortedBoxedCommandBuffers) {
+            visit(unbox_VkCommandBuffer(boxed));
+        }
+
+        stream->putBe64(recordings.size());
+        for (const CommandBufferInfo* commandBufferInfo : recordings) {
+            stream->putBe64(reinterpret_cast<uint64_t>(commandBufferInfo->boxed));
+
+            stream->putBe64(commandBufferInfo->subCmds.size());
+            for (VkCommandBuffer subCommandBuffer : commandBufferInfo->subCmds) {
+                stream->putBe64(
+                    reinterpret_cast<uint64_t>(unboxed_to_boxed_VkCommandBuffer(subCommandBuffer)));
+            }
+
+            const auto& handles = commandBufferInfo->recordedHandles;
+            stream->putBe64(handles.size());
+            stream->write(handles.data(), handles.size() * sizeof(uint64_t));
+
+            const auto& commands = commandBufferInfo->recordedCommands;
+            stream->putBe64(commands.size());
+            stream->write(commands.data(), commands.size());
+        }
+    }
+
+    // Replays the recordings through the deferred command path, so they rebuild their
+    // bookkeeping like a guest flush does.
+    bool loadCommandBufferRecordings(gfxstream::Stream* stream, GfxApiLogger& gfxLogger) {
+        VkDecoderContext context = {
+            .processName = nullptr,
+            .gfxApiLogger = &gfxLogger,
+        };
+        std::unordered_set<uint64_t> replayed;
+        const uint64_t count = stream->getBe64();
+        uint64_t dropped = 0;
+        for (uint64_t i = 0; i < count; i++) {
+            const uint64_t boxed = stream->getBe64();
+
+            std::vector<uint64_t> subCommandBuffers(stream->getBe64());
+            for (uint64_t& subCommandBuffer : subCommandBuffers) {
+                subCommandBuffer = stream->getBe64();
+            }
+
+            std::vector<uint64_t> handles(stream->getBe64());
+            stream->read(handles.data(), handles.size() * sizeof(uint64_t));
+
+            std::vector<uint8_t> commands(stream->getBe64());
+            stream->read(commands.data(), commands.size());
+
+            if (!sBoxedHandleManager.get(boxed)) {
+                GFXSTREAM_ERROR("Snapshot load failure: unknown VkCommandBuffer 0x%" PRIx64, boxed);
+                return false;
+            }
+
+            // A recording is invalid once an object it uses is destroyed or a secondary it
+            // executes lost its recording; the guest cannot submit it again.
+            auto destroyed = std::find_if(handles.begin(), handles.end(), [](uint64_t handle) {
+                return !sBoxedHandleManager.get(handle);
+            });
+            if (destroyed != handles.end()) {
+                GFXSTREAM_ERROR(
+                    "Snapshot load: dropping the recording of VkCommandBuffer 0x%" PRIx64
+                    ", it uses the destroyed handle 0x%" PRIx64,
+                    boxed, *destroyed);
+                dropped++;
+                continue;
+            }
+            auto unrecorded = std::find_if(
+                subCommandBuffers.begin(), subCommandBuffers.end(),
+                [&](uint64_t subCommandBuffer) { return !replayed.count(subCommandBuffer); });
+            if (unrecorded != subCommandBuffers.end()) {
+                GFXSTREAM_ERROR(
+                    "Snapshot load: dropping the recording of VkCommandBuffer 0x%" PRIx64
+                    ", it executes VkCommandBuffer 0x%" PRIx64 " without a recording",
+                    boxed, *unrecorded);
+                dropped++;
+                continue;
+            }
+
+            decodeDeferredCommands(kInvalidSnapshotApiCallHandle, (VkCommandBuffer)boxed,
+                                   commands.size(), commands.data(), context);
+            replayed.insert(boxed);
+        }
+        if (dropped) {
+            GFXSTREAM_ERROR("Snapshot load: dropped %" PRIu64 " of %" PRIu64
+                            " command buffer recordings",
+                            dropped, count);
+        }
+        return true;
+    }
+
     void processEventsForSubmittedCommandBuffer(VkQueue queue, VkCommandBuffer commandBuffer) {
         std::lock_guard<std::mutex> lock(mMutex);
         auto* cmdBufferInfo = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
@@ -857,6 +968,8 @@ class VkDecoderGlobalState::Impl {
 
         // Semaphores
         saveSemaphores(stream);
+
+        saveCommandBufferRecordings(stream);
 
         mSnapshotState = SnapshotState::Normal;
         GFXSTREAM_DEBUG("VulkanSnapshots save (end)");
@@ -1279,6 +1392,12 @@ class VkDecoderGlobalState::Impl {
             mSnapshotLoadBoxedInstance2ContextId.clear();
             mSnapshotState = SnapshotState::Normal;
         }
+
+        GFXSTREAM_DEBUG("snapshot load: command buffer recordings");
+        if (!loadCommandBufferRecordings(stream, gfxLogger)) {
+            return false;
+        }
+
         GFXSTREAM_DEBUG("VulkanSnapshots load (end)");
         if (stream && stream->hasErrors()) {
             GFXSTREAM_ERROR("VulkanSnapshots load failed due to stream errors: %s",
@@ -8038,6 +8157,16 @@ class VkDecoderGlobalState::Impl {
         if (result != VK_SUCCESS) {
             return result;
         }
+
+        std::lock_guard<std::mutex> lock(mMutex);
+        auto* commandPoolInfo = gfxstream::base::find(mCommandPoolInfo, commandPool);
+        if (!commandPoolInfo) return VK_ERROR_UNKNOWN;
+        for (VkCommandBuffer commandBuffer : commandPoolInfo->cmdBuffers) {
+            auto* commandBufferInfo = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
+            if (commandBufferInfo) {
+                commandBufferInfo->reset();
+            }
+        }
         return result;
     }
 
@@ -9842,11 +9971,42 @@ class VkDecoderGlobalState::Impl {
                                        const void* pData, const VkDecoderContext& context) {
         (void)queue;
 
+        decodeDeferredCommands(apiCallHandle, boxed_commandBuffer, dataSize, pData, context);
+    }
+
+    void decodeDeferredCommands(VkSnapshotApiCallHandle apiCallHandle,
+                                VkCommandBuffer boxed_commandBuffer, VkDeviceSize dataSize,
+                                const void* pData, const VkDecoderContext& context) {
         VkCommandBuffer commandBuffer = unbox_VkCommandBuffer(boxed_commandBuffer);
         VulkanDispatch* vk = dispatch_VkCommandBuffer(boxed_commandBuffer);
         VulkanMemReadingStream* readStream = readstream_VkCommandBuffer(boxed_commandBuffer);
-        subDecode(readStream, vk, apiCallHandle, boxed_commandBuffer, commandBuffer, dataSize,
-                  pData, context);
+        if (!snapshotsEnabled()) {
+            subDecode(readStream, vk, apiCallHandle, boxed_commandBuffer, commandBuffer, dataSize,
+                      pData, context);
+            return;
+        }
+
+        std::vector<BoxedHandle> handles;
+        {
+            ScopedUnboxedHandleRecorder recorder(&handles);
+            subDecode(readStream, vk, apiCallHandle, boxed_commandBuffer, commandBuffer, dataSize,
+                      pData, context);
+        }
+
+        std::lock_guard<std::mutex> lock(mMutex);
+        auto* commandBufferInfo = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
+        if (!commandBufferInfo) {
+            GFXSTREAM_ERROR("Failed to find VkCommandBuffer:%p", commandBuffer);
+            return;
+        }
+        const uint8_t* commands = static_cast<const uint8_t*>(pData);
+        commandBufferInfo->recordedCommands.insert(commandBufferInfo->recordedCommands.end(),
+                                                   commands, commands + dataSize);
+        auto& recordedHandles = commandBufferInfo->recordedHandles;
+        recordedHandles.insert(recordedHandles.end(), handles.begin(), handles.end());
+        sort(recordedHandles.begin(), recordedHandles.end());
+        recordedHandles.erase(unique(recordedHandles.begin(), recordedHandles.end()),
+                              recordedHandles.end());
     }
 
     void on_vkQueueFlushCommandsFromAuxMemoryGOOGLE(gfxstream::base::BumpPool* pool,

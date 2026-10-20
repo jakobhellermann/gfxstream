@@ -48,7 +48,22 @@ struct ReadStreamRegistry {
 
 static ReadStreamRegistry sReadStreamRegistry;
 
+thread_local std::vector<BoxedHandle>* tUnboxedHandles = nullptr;
+
+void recordUnboxedHandle(uint64_t boxed) {
+    if (tUnboxedHandles) {
+        tUnboxedHandles->push_back(boxed);
+    }
+}
+
 }  // namespace
+
+ScopedUnboxedHandleRecorder::ScopedUnboxedHandleRecorder(std::vector<BoxedHandle>* handles)
+    : mPrevious(tUnboxedHandles) {
+    tUnboxedHandles = handles;
+}
+
+ScopedUnboxedHandleRecorder::~ScopedUnboxedHandleRecorder() { tUnboxedHandles = mPrevious; }
 
 void BoxedHandleManager::replayHandles(std::vector<BoxedHandle> handles) {
     mHandleReplayQueue.clear();
@@ -414,6 +429,8 @@ VkObjectT unbox_VkType(VkObjectT boxed) {
         return VK_NULL_HANDLE;
     }
 
+    recordUnboxedHandle((uint64_t)(uintptr_t)boxed);
+
     VkObjectT unboxed = VK_NULL_HANDLE;
 
     if constexpr (std::is_same_v<VkObjectT, VkQueue>) {
@@ -446,6 +463,8 @@ VkObjectT try_unbox_VkType(VkObjectT boxed) {
     if (boxed == VK_NULL_HANDLE) {
         return VK_NULL_HANDLE;
     }
+
+    recordUnboxedHandle((uint64_t)(uintptr_t)boxed);
 
     VkObjectT unboxed = VK_NULL_HANDLE;
 

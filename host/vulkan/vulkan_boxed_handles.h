@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <mutex>
+#include <vector>
 
 #include "vulkan_dispatch.h"
 #include "vulkan_handles.h"
@@ -132,6 +133,19 @@ class BoxedHandleManager {
 };
 
 extern BoxedHandleManager sBoxedHandleManager;
+
+// Collects the boxed handles that this thread unboxes while it is alive.
+class ScopedUnboxedHandleRecorder {
+   public:
+    explicit ScopedUnboxedHandleRecorder(std::vector<BoxedHandle>* handles);
+    ~ScopedUnboxedHandleRecorder();
+
+    ScopedUnboxedHandleRecorder(const ScopedUnboxedHandleRecorder&) = delete;
+    ScopedUnboxedHandleRecorder& operator=(const ScopedUnboxedHandleRecorder&) = delete;
+
+   private:
+    std::vector<BoxedHandle>* mPrevious;
+};
 
 #define DEFINE_BOXED_DISPATCHABLE_HANDLE_API_DECL(type)               \
     type new_boxed_##type(type underlying, VulkanDispatch* dispatch); \
