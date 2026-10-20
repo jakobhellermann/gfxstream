@@ -382,7 +382,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             .pCommandBuffers = &commandBuffer,
         };
         VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-        VK_CHECK(
+        VK_RETURN_FALSE_ON_ERROR(
             dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
         return true;
     }
@@ -496,7 +496,8 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    VK_CHECK(dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
+    VK_RETURN_FALSE_ON_ERROR(
+        dispatch->vkWaitForFences(stateBlock->device, 1, &fence, VK_TRUE, 3000000000L));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
     return true;
 }
@@ -553,7 +554,7 @@ bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_CHECK(
+    VK_RETURN_FALSE_ON_ERROR(
         dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
     stream->putBe64(bufferInfo->size);
@@ -677,7 +678,7 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_CHECK(
+    VK_RETURN_FALSE_ON_ERROR(
         dispatch->vkWaitForFences(stateBlock->device, 1, &staging->fence, VK_TRUE, 3000000000L));
     VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
     return true;
