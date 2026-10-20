@@ -3847,6 +3847,7 @@ class VkDecoderGlobalState::Impl {
         imageViewInfo.device = device;
         imageViewInfo.needEmulatedAlpha = needEmulatedAlpha;
         imageViewInfo.boundColorBuffer = imageInfo->boundColorBuffer;
+        imageViewInfo.imageAlive = imageInfo->alive;
         if (imageViewInfo.boundColorBuffer) {
             deviceInfo->debugUtilsHelper.addDebugLabel(*pView, "ColorBuffer:%d",
                                                        *imageViewInfo.boundColorBuffer);
@@ -5129,6 +5130,7 @@ class VkDecoderGlobalState::Impl {
                             gfxstream::base::find(mImageViewInfo, entry->imageInfo.imageView);
                         if (imageViewInfo) {
                             entry->alives.push_back(imageViewInfo->alive);
+                            entry->alives.push_back(imageViewInfo->imageAlive);
                             entry->boundColorBuffer = imageViewInfo->boundColorBuffer;
                         }
                     }

@@ -360,6 +360,7 @@ struct BufferViewInfo {
 struct ImageInfo {
     VkDevice device;
     VkImage boxed = VK_NULL_HANDLE;
+    std::shared_ptr<bool> alive{new bool(true)};
     VkImageCreateInfo imageCreateInfoShallow;
     std::unique_ptr<AndroidNativeBufferInfo> anbInfo;
     // Compression info, only valid if texture needs emulated decompression
@@ -393,6 +394,8 @@ struct ImageViewInfo {
     // Color buffer, provided via vkAllocateMemory().
     std::optional<HandleType> boundColorBuffer;
     std::shared_ptr<bool> alive{new bool(true)};
+    // A view whose image is destroyed is no longer usable.
+    std::weak_ptr<bool> imageAlive;
 };
 
 struct SamplerInfo {
