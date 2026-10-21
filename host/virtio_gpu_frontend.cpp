@@ -21,7 +21,6 @@
 // X11 defines status as a preprocessor define which messes up
 // anyone with a `Status` type.
 #include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <google/protobuf/text_format.h>
 #endif  // ifdef GFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT
 
 #include <vulkan/vulkan.h>
@@ -1054,7 +1053,7 @@ void VirtioGpuFrontend::setScreenBackground(int width, int height, const uint8_t
 #ifdef GFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT
 
 static constexpr const char kSnapshotBasenameAsg[] = "gfxstream_asg.bin";
-static constexpr const char kSnapshotBasenameFrontend[] = "gfxstream_frontend.txtproto";
+static constexpr const char kSnapshotBasenameFrontend[] = "gfxstream_frontend.binpb";
 static constexpr const char kSnapshotBasenameRenderer[] = "gfxstream_renderer.bin";
 
 int VirtioGpuFrontend::snapshotRenderer(const char* directory) {
@@ -1114,8 +1113,13 @@ int VirtioGpuFrontend::snapshotFrontend(const char* directory) {
     }
     google::protobuf::io::FileOutputStream snapshotOutputStream(snapshotFd);
     snapshotOutputStream.SetCloseOnDelete(true);
-    if (!google::protobuf::TextFormat::Print(snapshot, &snapshotOutputStream)) {
+    if (!snapshot.SerializeToZeroCopyStream(&snapshotOutputStream)) {
         GFXSTREAM_ERROR("Failed to save snapshot: failed to serialize to stream.");
+        return -1;
+    }
+    if (!snapshotOutputStream.Flush()) {
+        GFXSTREAM_ERROR("Failed to save snapshot: failed to write %s: %s",
+                        snapshotPath.string().c_str(), strerror(snapshotOutputStream.GetErrno()));
         return -1;
     }
 
@@ -1199,7 +1203,7 @@ int VirtioGpuFrontend::restoreFrontend(const char* directory) {
         }
         google::protobuf::io::FileInputStream snapshotInputStream(snapshotFd);
         snapshotInputStream.SetCloseOnDelete(true);
-        if (!google::protobuf::TextFormat::Parse(&snapshotInputStream, &snapshot)) {
+        if (!snapshot.ParseFromZeroCopyStream(&snapshotInputStream)) {
             GFXSTREAM_ERROR("Failed to restore snapshot: failed to parse from file.");
             return -1;
         }
