@@ -139,9 +139,35 @@ EmulatedPhysicalDeviceMemoryProperties::EmulatedPhysicalDeviceMemoryProperties(
         }
     }
 
+    // Host-visible memory is what the guest maps and what the Vulkan snapshot reads
+    // back. Drivers map non-cached host-visible memory write-combined, and CPU
+    // reads from a write-combined mapping are slow (hundreds of MB/s vs tens of
+    // GB/s cached), which makes every CPU consumer of the mapping pay: the
+    // snapshot content save, and guest reads through the exported dma-buf.
+    // Caching is the better trade on the same heap whenever the host exposes a
+    // cached sibling, so point the host allocation at the cached type. The
+    // guest-visible property flags are unchanged; cached memory satisfies
+    // everything the non-cached type promises on a coherent host. The search
+    // requires the sibling to keep the requested flags and heap, so on hosts
+    // where cached host-visible memory is not coherent, no sibling exists and
+    // the original type is kept.
     for (uint32_t i = 0; i < mGuestMemoryProperties.memoryTypeCount; i++) {
+        const VkMemoryPropertyFlags flags = mGuestMemoryProperties.memoryTypes[i].propertyFlags;
+        uint32_t hostMemoryTypeIndex = i;
+        if (flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            const VkMemoryPropertyFlags cachedFlags = flags | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            const uint32_t heapIndex = mGuestMemoryProperties.memoryTypes[i].heapIndex;
+            for (uint32_t j = 0; j < mHostMemoryProperties.memoryTypeCount; j++) {
+                const VkMemoryType& candidate = mHostMemoryProperties.memoryTypes[j];
+                if (candidate.heapIndex == heapIndex &&
+                    (candidate.propertyFlags & cachedFlags) == cachedFlags) {
+                    hostMemoryTypeIndex = j;
+                    break;
+                }
+            }
+        }
         mGuestMemoryTypes.push_back(EmulatedGuestMemoryType{
-            .hostMemoryTypeIndex = i,
+            .hostMemoryTypeIndex = hostMemoryTypeIndex,
             .memoryType = mGuestMemoryProperties.memoryTypes[i],
         });
     }
