@@ -110,8 +110,21 @@ SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock) {
     return staging;
 }
 
+bool finishSnapshotTransfer(StateBlock* stateBlock, SnapshotStagingContext* staging) {
+    if (!staging->pending) {
+        return true;
+    }
+    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, staging->fence));
+    VK_CHECK(stateBlock->deviceDispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
+    staging->pending = false;
+    return true;
+}
+
 void destroySnapshotStagingContext(StateBlock* stateBlock, SnapshotStagingContext* staging) {
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    if (!finishSnapshotTransfer(stateBlock, staging)) {
+        GFXSTREAM_FATAL("Snapshot transfer did not finish before destroying its staging");
+    }
     if (staging->mapped != nullptr) {
         dispatch->vkUnmapMemory(stateBlock->device, staging->memory);
         staging->mapped = nullptr;
@@ -348,6 +361,9 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     if (!getFormatTransferInfo(imageCreateInfo.format, imageCreateInfo.extent, &transferInfo)) {
         return true;
     }
+    if (!finishSnapshotTransfer(stateBlock, staging)) {
+        return false;
+    }
     VkCommandBuffer commandBuffer = staging->commandBuffer;
     VkFence fence = staging->fence;
 
@@ -392,7 +408,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
             .pCommandBuffers = &commandBuffer,
         };
         VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-        VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, fence));
+        staging->pending = true;
         return true;
     }
     // Region bases match the save path's.
@@ -505,8 +521,8 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         .pCommandBuffers = &commandBuffer,
     };
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, fence));
-    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &fence));
+    // waited for when the context is used next, so the next image's read overlaps this upload
+    staging->pending = true;
     return true;
 }
 
@@ -637,6 +653,9 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     }
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
 
+    if (!finishSnapshotTransfer(stateBlock, staging)) {
+        return false;
+    }
     if (!ensureSnapshotStagingCapacity(stateBlock, staging,
                                        static_cast<VkDeviceSize>(bufferInfo->size))) {
         return false;
@@ -685,8 +704,7 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     };
     VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
     VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    VK_RETURN_FALSE_ON_ERROR(waitForSnapshotTransfer(stateBlock, staging->fence));
-    VK_CHECK(dispatch->vkResetFences(stateBlock->device, 1, &staging->fence));
+    staging->pending = true;
     return true;
 }
 

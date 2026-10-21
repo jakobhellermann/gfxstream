@@ -36,6 +36,8 @@ struct SnapshotStagingContext {
     VkDeviceSize capacity = 0;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkFence fence = VK_NULL_HANDLE;
+    // a submitted transfer may still use the buffer and command buffer
+    bool pending = false;
 };
 
 SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock);
@@ -43,6 +45,8 @@ void destroySnapshotStagingContext(StateBlock* stateBlock,
                                    SnapshotStagingContext* staging);
 bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContext* staging,
                                   VkDeviceSize needed);
+// Waits for the context's submitted transfer, if any.
+bool finishSnapshotTransfer(StateBlock* stateBlock, SnapshotStagingContext* staging);
 
 bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                       SnapshotStagingContext* staging, VkImage image,

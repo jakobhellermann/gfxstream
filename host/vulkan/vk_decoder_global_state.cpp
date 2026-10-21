@@ -1210,7 +1210,12 @@ class VkDecoderGlobalState::Impl {
 
             // Set up VK structs to snapshot other Vulkan objects
             std::unordered_map<VkDevice, StateBlock> snapshotStateBlocks;
-            std::unordered_map<VkDevice, SnapshotStagingContext> snapshotStagings;
+            // Two contexts per device: the next content is read while the previous uploads.
+            struct StagingPair {
+                std::array<SnapshotStagingContext, 2> contexts;
+                size_t next = 0;
+            };
+            std::unordered_map<VkDevice, StagingPair> snapshotStagings;
             auto snapshotScratchFor = [&](VkDevice device) {
                 struct Scratch {
                     StateBlock* stateBlock;
@@ -1220,16 +1225,23 @@ class VkDecoderGlobalState::Impl {
                 if (stateBlockIt == snapshotStateBlocks.end()) {
                     stateBlockIt =
                         snapshotStateBlocks.emplace(device, createSnapshotStateBlock(device)).first;
-                    snapshotStagings.emplace(device,
-                                             createSnapshotStagingContext(&stateBlockIt->second));
+                    snapshotStagings.emplace(
+                        device,
+                        StagingPair{{createSnapshotStagingContext(&stateBlockIt->second),
+                                     createSnapshotStagingContext(&stateBlockIt->second)}});
                 }
-                return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second};
+                StagingPair& pair = snapshotStagings.find(device)->second;
+                SnapshotStagingContext* staging = &pair.contexts[pair.next];
+                pair.next ^= 1;
+                return Scratch{&stateBlockIt->second, staging};
             };
             auto releaseSnapshotScratch = [&]() {
-                for (auto& [device, staging] : snapshotStagings) {
+                for (auto& [device, pair] : snapshotStagings) {
                     auto stateBlockIt = snapshotStateBlocks.find(device);
                     if (stateBlockIt != snapshotStateBlocks.end()) {
-                        destroySnapshotStagingContext(&stateBlockIt->second, &staging);
+                        for (auto& staging : pair.contexts) {
+                            destroySnapshotStagingContext(&stateBlockIt->second, &staging);
+                        }
                     }
                 }
                 for (auto& [device, stateBlock] : snapshotStateBlocks) {
