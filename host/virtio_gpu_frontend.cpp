@@ -16,6 +16,7 @@
 
 #ifdef GFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <filesystem>
 // X11 defines status as a preprocessor define which messes up
@@ -1056,11 +1057,40 @@ static constexpr const char kSnapshotBasenameAsg[] = "gfxstream_asg.bin";
 static constexpr const char kSnapshotBasenameFrontend[] = "gfxstream_frontend.binpb";
 static constexpr const char kSnapshotBasenameRenderer[] = "gfxstream_renderer.bin";
 
+// Opens without truncating: an existing file's page cache is reused instead of
+// allocated anew while the guest waits for the snapshot.
+static FILE* openSnapshotForRewrite(const std::filesystem::path& path) {
+    int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0666);
+    if (fd < 0) {
+        return nullptr;
+    }
+    FILE* file = fdopen(fd, "w");
+    if (!file) {
+        close(fd);
+    }
+    return file;
+}
+
+// Cuts off what a longer previous snapshot left behind.
+static bool trimSnapshotFile(FILE* file) {
+    if (fflush(file) != 0) {
+        return false;
+    }
+    long length = ftell(file);
+    return length >= 0 && ftruncate(fileno(file), length) == 0;
+}
+
 int VirtioGpuFrontend::snapshotRenderer(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameRenderer;
 
-    StdioStream stream(fopen(snapshotPath.string().c_str(), "wb"), StdioStream::kOwner);
+    StdioStream stream(openSnapshotForRewrite(snapshotPath), StdioStream::kOwner);
+    if (!stream.get()) {
+        int err = errno;
+        GFXSTREAM_ERROR("Failed to snapshot renderer: open %s: %s", snapshotPath.c_str(),
+                        strerror(err));
+        return -err;
+    }
 
     if (!mRenderer) {
         GFXSTREAM_ERROR("Failed to snapshot renderer: renderer not available.");
@@ -1069,6 +1099,12 @@ int VirtioGpuFrontend::snapshotRenderer(const char* directory) {
     if (!mRenderer->save(&stream, nullptr)) {
         GFXSTREAM_ERROR("Failed to snapshot renderer: mRenderer->save failed.");
         return -EINVAL;
+    }
+    if (!trimSnapshotFile(stream.get())) {
+        int err = errno;
+        GFXSTREAM_ERROR("Failed to snapshot renderer: write %s: %s", snapshotPath.c_str(),
+                        strerror(err));
+        return -err;
     }
 
     return 0;
@@ -1130,12 +1166,24 @@ int VirtioGpuFrontend::snapshotAsg(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameAsg;
 
-    StdioStream stream(fopen(snapshotPath.string().c_str(), "wb"), StdioStream::kOwner);
+    StdioStream stream(openSnapshotForRewrite(snapshotPath), StdioStream::kOwner);
+    if (!stream.get()) {
+        int err = errno;
+        GFXSTREAM_ERROR("Failed to save snapshot: open %s: %s", snapshotPath.c_str(),
+                        strerror(err));
+        return -err;
+    }
 
     int ret = gfxstream_address_space_save_memory_state(&stream);
     if (ret) {
         GFXSTREAM_ERROR("Failed to save snapshot: failed to save ASG state.");
         return ret;
+    }
+    if (!trimSnapshotFile(stream.get())) {
+        int err = errno;
+        GFXSTREAM_ERROR("Failed to save snapshot: write %s: %s", snapshotPath.c_str(),
+                        strerror(err));
+        return -err;
     }
     return 0;
 }
