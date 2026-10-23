@@ -9591,31 +9591,27 @@ class VkDecoderGlobalState::Impl {
         destroyRenderPassLocked(device, deviceDispatch, renderPass);
     }
 
-    bool registerRenderPassBeginInfo(VkCommandBuffer commandBuffer,
+    void registerRenderPassBeginInfo(VkCommandBuffer commandBuffer,
                                      const VkRenderPassBeginInfo* pRenderPassBegin) {
         if (!pRenderPassBegin) {
-            GFXSTREAM_ERROR("pRenderPassBegin is null");
-            return false;
+            GFXSTREAM_FATAL("pRenderPassBegin is null");
         }
 
         std::lock_guard<std::mutex> lock(mMutex);
         CommandBufferInfo* cmdBufferInfo = gfxstream::base::find(mCommandBufferInfo, commandBuffer);
         if (!cmdBufferInfo) {
-            GFXSTREAM_ERROR("VkCommandBuffer=%p not found in mCommandBufferInfo", commandBuffer);
-            return false;
+            GFXSTREAM_FATAL("VkCommandBuffer=%p not found in mCommandBufferInfo", commandBuffer);
         }
 
         FramebufferInfo* fbInfo =
             gfxstream::base::find(mFramebufferInfo, pRenderPassBegin->framebuffer);
         if (!fbInfo) {
-            GFXSTREAM_ERROR("pRenderPassBegin->framebuffer=%p not found in mFbInfo",
+            GFXSTREAM_FATAL("pRenderPassBegin->framebuffer=%p not found in mFbInfo",
                             pRenderPassBegin->framebuffer);
-            return false;
         }
 
         cmdBufferInfo->releasedColorBuffers.insert(fbInfo->attachedColorBuffers.begin(),
                                                    fbInfo->attachedColorBuffers.end());
-        return true;
     }
 
     void on_vkCmdBeginRenderPass(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle,
@@ -9624,9 +9620,8 @@ class VkDecoderGlobalState::Impl {
                                  VkSubpassContents contents) {
         auto commandBuffer = unbox_VkCommandBuffer(boxed_commandBuffer);
         auto vk = dispatch_VkCommandBuffer(boxed_commandBuffer);
-        if (registerRenderPassBeginInfo(commandBuffer, pRenderPassBegin)) {
-            vk->vkCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
-        }
+        registerRenderPassBeginInfo(commandBuffer, pRenderPassBegin);
+        vk->vkCmdBeginRenderPass(commandBuffer, pRenderPassBegin, contents);
     }
 
     void on_vkCmdBeginRenderPass2(gfxstream::base::BumpPool* pool, VkSnapshotApiCallHandle,
@@ -9635,9 +9630,8 @@ class VkDecoderGlobalState::Impl {
                                   const VkSubpassBeginInfo* pSubpassBeginInfo) {
         auto commandBuffer = unbox_VkCommandBuffer(boxed_commandBuffer);
         auto vk = dispatch_VkCommandBuffer(boxed_commandBuffer);
-        if (registerRenderPassBeginInfo(commandBuffer, pRenderPassBegin)) {
-            vk->vkCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
-        }
+        registerRenderPassBeginInfo(commandBuffer, pRenderPassBegin);
+        vk->vkCmdBeginRenderPass2(commandBuffer, pRenderPassBegin, pSubpassBeginInfo);
     }
 
     void on_vkCmdBeginRenderPass2KHR(gfxstream::base::BumpPool* pool,
