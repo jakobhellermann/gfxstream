@@ -38,6 +38,7 @@
 #include "gfxstream/common/logging.h"
 #include "gfxstream/host/address_space_graphics.h"
 #include "gfxstream/host/file_stream.h"
+#include "compressed_file_stream.h"
 #include "gfxstream/host/tracing.h"
 #include "gfxstream/memory/SharedMemory.h"
 #include "virtgpu_gfxstream_protocol.h"
@@ -1032,7 +1033,8 @@ int VirtioGpuFrontend::snapshotRenderer(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameRenderer;
 
-    StdioStream stream(openSnapshotForRewrite(snapshotPath), StdioStream::kOwner);
+    CompressedFileStream stream(openSnapshotForRewrite(snapshotPath),
+                                CompressedFileStream::kWrite, kSnapshotBasenameRenderer);
     if (!stream.get()) {
         int err = errno;
         GFXSTREAM_ERROR("Failed to snapshot renderer: open %s: %s", snapshotPath.c_str(),
@@ -1048,7 +1050,7 @@ int VirtioGpuFrontend::snapshotRenderer(const char* directory) {
         GFXSTREAM_ERROR("Failed to snapshot renderer: mRenderer->save failed.");
         return -EINVAL;
     }
-    if (!trimSnapshotFile(stream.get())) {
+    if (!stream.finish() || !trimSnapshotFile(stream.get())) {
         int err = errno;
         GFXSTREAM_ERROR("Failed to snapshot renderer: write %s: %s", snapshotPath.c_str(),
                         strerror(err));
@@ -1114,7 +1116,8 @@ int VirtioGpuFrontend::snapshotAsg(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameAsg;
 
-    StdioStream stream(openSnapshotForRewrite(snapshotPath), StdioStream::kOwner);
+    CompressedFileStream stream(openSnapshotForRewrite(snapshotPath),
+                                CompressedFileStream::kWrite, kSnapshotBasenameAsg);
     if (!stream.get()) {
         int err = errno;
         GFXSTREAM_ERROR("Failed to save snapshot: open %s: %s", snapshotPath.c_str(),
@@ -1127,7 +1130,7 @@ int VirtioGpuFrontend::snapshotAsg(const char* directory) {
         GFXSTREAM_ERROR("Failed to save snapshot: failed to save ASG state.");
         return ret;
     }
-    if (!trimSnapshotFile(stream.get())) {
+    if (!stream.finish() || !trimSnapshotFile(stream.get())) {
         int err = errno;
         GFXSTREAM_ERROR("Failed to save snapshot: write %s: %s", snapshotPath.c_str(),
                         strerror(err));
@@ -1177,7 +1180,8 @@ int VirtioGpuFrontend::restoreRenderer(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameRenderer;
 
-    StdioStream stream(fopen(snapshotPath.string().c_str(), "rb"), StdioStream::kOwner);
+    CompressedFileStream stream(fopen(snapshotPath.string().c_str(), "rb"),
+                                CompressedFileStream::kRead, kSnapshotBasenameRenderer);
 
     if (!mRenderer) {
         GFXSTREAM_ERROR("Failed to restore renderer: renderer not available.");
@@ -1245,7 +1249,8 @@ int VirtioGpuFrontend::restoreAsg(const char* directory) {
     const std::filesystem::path snapshotDirectory = std::string(directory);
     const std::filesystem::path snapshotPath = snapshotDirectory / kSnapshotBasenameAsg;
 
-    StdioStream stream(fopen(snapshotPath.string().c_str(), "rb"), StdioStream::kOwner);
+    CompressedFileStream stream(fopen(snapshotPath.string().c_str(), "rb"),
+                                CompressedFileStream::kRead, kSnapshotBasenameAsg);
 
     // Gather external memory info that the ASG device needs to reload.
     AddressSpaceDeviceLoadResources asgLoadResources;

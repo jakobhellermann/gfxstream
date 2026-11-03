@@ -170,6 +170,9 @@ if get_option('snapshot').enabled()
   )
   inc_gfxstream_backend += inc_stream_servers
   deps_gfxstream_backend += dependency('protobuf')
+  # snapshot files are zstd compressed (compressed_file_stream.cpp)
+  files_lib_gfxstream_backend += files('compressed_file_stream.cpp')
+  deps_gfxstream_backend += dependency('libzstd')
   gfxstream_backend_cpp_args += [
     '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_SUPPORT=1',
     '-DGFXSTREAM_BUILD_WITH_SNAPSHOT_FRONTEND_SUPPORT=1',
