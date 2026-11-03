@@ -73,6 +73,7 @@
                 (if static then protobuf-static else protobuf)
                 vulkan-headers
                 perfetto-sdk
+                zstd
               ] ++ lib.optionals static [
                 # Explicit: the .pc chain of the static protobuf resolves
                 # through these paths even when nothing propagates them.
