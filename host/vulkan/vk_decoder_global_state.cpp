@@ -772,20 +772,44 @@ class VkDecoderGlobalState::Impl {
         // Set up VK structs to snapshot other Vulkan objects
         std::unordered_map<VkDevice, StateBlock> snapshotStateBlocks;
         std::unordered_map<VkDevice, SnapshotStagingContext> snapshotStagings;
+        // Batched readbacks (GFXSTREAM_SNAPSHOT_SAVE_BATCH_MB, 0 = one submit per object): image
+        // and buffer bytes go to the stream through saveWriter, in the same order and format.
+        const bool batchedSave = snapshotSaveBatchBytes() > 0;
+        SnapshotSaveWriter saveWriter = createSnapshotSaveWriter(stream);
+        std::unordered_map<VkDevice, SnapshotReadbackBatch> snapshotReadbacks;
         auto snapshotScratchFor = [&](VkDevice device) {
             struct Scratch {
                 StateBlock* stateBlock;
                 SnapshotStagingContext* staging;
+                SnapshotReadbackBatch* readback;
             };
             auto stateBlockIt = snapshotStateBlocks.find(device);
             if (stateBlockIt == snapshotStateBlocks.end()) {
                 stateBlockIt =
                     snapshotStateBlocks.emplace(device, createSnapshotStateBlock(device)).first;
-                snapshotStagings.emplace(device, createSnapshotStagingContext(&stateBlockIt->second));
+                if (batchedSave) {
+                    snapshotReadbacks.emplace(device,
+                                              createSnapshotReadbackBatch(&stateBlockIt->second));
+                } else {
+                    snapshotStagings.emplace(device,
+                                             createSnapshotStagingContext(&stateBlockIt->second));
+                }
             }
-            return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second};
+            if (batchedSave) {
+                return Scratch{&stateBlockIt->second, nullptr,
+                               &snapshotReadbacks.find(device)->second};
+            }
+            return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second, nullptr};
         };
-        auto releaseSnapshotScratch = [&]() {
+        // ok: the save succeeded so far, write what is still pending
+        auto releaseSnapshotScratch = [&](bool ok) {
+            bool written = true;
+            if (batchedSave && ok) {
+                written = finishSnapshotSaveWriter(&saveWriter);
+            }
+            for (auto& [device, readback] : snapshotReadbacks) {
+                destroySnapshotReadbackBatch(&readback);
+            }
             for (auto& [device, staging] : snapshotStagings) {
                 auto stateBlockIt = snapshotStateBlocks.find(device);
                 if (stateBlockIt != snapshotStateBlocks.end()) {
@@ -795,6 +819,7 @@ class VkDecoderGlobalState::Impl {
             for (auto& [device, stateBlock] : snapshotStateBlocks) {
                 releaseSnapshotStateBlock(&stateBlock);
             }
+            return written;
         };
 
         GFXSTREAM_DEBUG("snapshot save: image content");
@@ -819,14 +844,22 @@ class VkDecoderGlobalState::Impl {
                 // color buffer is saved in ColorBufferVk already
                 continue;
             }
-            // Vulkan command playback doesn't recover image layout. We need to do it here.
-            stream->putBe32(imageInfo.layout);
-
             auto scratch = snapshotScratchFor(imageInfo.device);
+            // Vulkan command playback doesn't recover image layout. We need to do it here.
+            if (batchedSave) {
+                snapshotSavePutBe32(&saveWriter, imageInfo.layout);
+            } else {
+                stream->putBe32(imageInfo.layout);
+            }
+
             // TODO(b/294277842): make sure the queue is empty before using.
-            if (!saveImageContent(stream, scratch.stateBlock, scratch.staging, unboxedImage,
-                                  &imageInfo)) {
-                releaseSnapshotScratch();
+            const bool saved =
+                batchedSave ? saveImageContentBatched(&saveWriter, scratch.readback, unboxedImage,
+                                                      &imageInfo)
+                            : saveImageContent(stream, scratch.stateBlock, scratch.staging,
+                                               unboxedImage, &imageInfo);
+            if (!saved) {
+                releaseSnapshotScratch(false);
                 return false;
             }
         }
@@ -853,13 +886,20 @@ class VkDecoderGlobalState::Impl {
             auto scratch = snapshotScratchFor(bufferInfo.device);
 
             // TODO(b/294277842): make sure the queue is empty before using.
-            if (!saveBufferContent(stream, scratch.stateBlock, scratch.staging, unboxedBuffer,
-                                   &bufferInfo)) {
-                releaseSnapshotScratch();
+            const bool saved =
+                batchedSave ? saveBufferContentBatched(&saveWriter, scratch.readback,
+                                                       unboxedBuffer, &bufferInfo)
+                            : saveBufferContent(stream, scratch.stateBlock, scratch.staging,
+                                                unboxedBuffer, &bufferInfo);
+            if (!saved) {
+                releaseSnapshotScratch(false);
                 return false;
             }
         }
-        releaseSnapshotScratch();
+        if (!releaseSnapshotScratch(true)) {
+            GFXSTREAM_ERROR("Failed to write the image and buffer contents on snapshot save");
+            return false;
+        }
 
         // snapshot descriptors
         GFXSTREAM_DEBUG("snapshot save: descriptors");
@@ -1210,38 +1250,28 @@ class VkDecoderGlobalState::Impl {
 
             // Set up VK structs to snapshot other Vulkan objects
             std::unordered_map<VkDevice, StateBlock> snapshotStateBlocks;
-            // Two contexts per device: the next content is read while the previous uploads.
-            struct StagingPair {
-                std::array<SnapshotStagingContext, 2> contexts;
-                size_t next = 0;
-            };
-            std::unordered_map<VkDevice, StagingPair> snapshotStagings;
+            // Uploads of a device are batched: many objects per submit, and the next batch is
+            // read while the previous one uploads.
+            std::unordered_map<VkDevice, SnapshotUploadBatch> snapshotStagings;
             auto snapshotScratchFor = [&](VkDevice device) {
                 struct Scratch {
                     StateBlock* stateBlock;
-                    SnapshotStagingContext* staging;
+                    SnapshotUploadBatch* staging;
                 };
                 auto stateBlockIt = snapshotStateBlocks.find(device);
                 if (stateBlockIt == snapshotStateBlocks.end()) {
                     stateBlockIt =
                         snapshotStateBlocks.emplace(device, createSnapshotStateBlock(device)).first;
-                    snapshotStagings.emplace(
-                        device,
-                        StagingPair{{createSnapshotStagingContext(&stateBlockIt->second),
-                                     createSnapshotStagingContext(&stateBlockIt->second)}});
+                    snapshotStagings.emplace(device,
+                                             createSnapshotUploadBatch(&stateBlockIt->second));
                 }
-                StagingPair& pair = snapshotStagings.find(device)->second;
-                SnapshotStagingContext* staging = &pair.contexts[pair.next];
-                pair.next ^= 1;
-                return Scratch{&stateBlockIt->second, staging};
+                return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second};
             };
             auto releaseSnapshotScratch = [&]() {
-                for (auto& [device, pair] : snapshotStagings) {
+                for (auto& [device, batch] : snapshotStagings) {
                     auto stateBlockIt = snapshotStateBlocks.find(device);
                     if (stateBlockIt != snapshotStateBlocks.end()) {
-                        for (auto& staging : pair.contexts) {
-                            destroySnapshotStagingContext(&stateBlockIt->second, &staging);
-                        }
+                        destroySnapshotUploadBatch(&stateBlockIt->second, &batch);
                     }
                 }
                 for (auto& [device, stateBlock] : snapshotStateBlocks) {
