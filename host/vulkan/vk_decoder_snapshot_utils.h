@@ -15,6 +15,9 @@
 #pragma once
 
 #include <array>
+#include <chrono>
+#include <deque>
+#include <vector>
 
 #include "vk_decoder_internal_structs.h"
 
@@ -57,6 +60,53 @@ struct SnapshotUploadBatch {
     uint64_t bytes = 0;
     uint64_t submits = 0;
 };
+
+// Snapshot save readbacks of one device: like SnapshotUploadBatch, many objects are copied into one
+// staging buffer with one submit, and one context's batch is written to the stream while the other's
+// copies run.
+struct SnapshotReadbackBatch {
+    StateBlock* stateBlock = nullptr;
+    std::array<SnapshotStagingContext, 2> contexts;
+    size_t current = 0;
+};
+
+// Batched snapshot save (GFXSTREAM_SNAPSHOT_SAVE_BATCH_MB, default 32; 0 = the per-object
+// saveImageContent / saveBufferContent). Everything the batched save functions write goes through
+// here, in order: small fields wait in `header`, object bytes wait in their staging buffer until its
+// submit finished. The stream gets exactly the bytes the per-object path writes.
+struct SnapshotSaveWriter {
+    gfxstream::Stream* stream = nullptr;
+    VkDeviceSize batchBytes = 0;
+    std::vector<uint8_t> header;
+    size_t headerWritten = 0;
+    struct Entry {
+        // header bytes before this offset go to the stream before this entry's data
+        size_t headerEnd;
+        SnapshotReadbackBatch* batch;
+        SnapshotStagingContext* staging;
+        VkDeviceSize offset;
+        VkDeviceSize size;
+    };
+    std::deque<Entry> entries;
+    uint64_t items = 0;
+    uint64_t bytes = 0;
+    uint64_t submits = 0;
+    double waitMs = 0;
+    double writeMs = 0;
+    std::chrono::steady_clock::time_point start;
+};
+
+VkDeviceSize snapshotSaveBatchBytes();
+SnapshotSaveWriter createSnapshotSaveWriter(gfxstream::Stream* stream);
+void snapshotSavePutBe32(SnapshotSaveWriter* writer, uint32_t value);
+// Submits all open batches and writes everything still pending to the stream.
+bool finishSnapshotSaveWriter(SnapshotSaveWriter* writer);
+SnapshotReadbackBatch createSnapshotReadbackBatch(StateBlock* stateBlock);
+void destroySnapshotReadbackBatch(SnapshotReadbackBatch* batch);
+bool saveImageContentBatched(SnapshotSaveWriter* writer, SnapshotReadbackBatch* batch,
+                             VkImage image, const ImageInfo* imageInfo);
+bool saveBufferContentBatched(SnapshotSaveWriter* writer, SnapshotReadbackBatch* batch,
+                              VkBuffer buffer, const BufferInfo* bufferInfo);
 
 SnapshotUploadBatch createSnapshotUploadBatch(StateBlock* stateBlock);
 // Submits the open batch, waits for all uploads and frees the staging.
