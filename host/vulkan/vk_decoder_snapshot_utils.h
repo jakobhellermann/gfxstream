@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "vk_decoder_internal_structs.h"
 
 namespace gfxstream {
@@ -38,7 +40,27 @@ struct SnapshotStagingContext {
     VkFence fence = VK_NULL_HANDLE;
     // a submitted transfer may still use the buffer and command buffer
     bool pending = false;
+    // snapshot load: the command buffer is begun and collects uploads, `used` bytes of the
+    // staging buffer are taken
+    bool recording = false;
+    VkDeviceSize used = 0;
 };
+
+// Snapshot load uploads of one device. Many images and buffers share one staging buffer, command
+// buffer and submit (GFXSTREAM_SNAPSHOT_UPLOAD_BATCH_MB, default 32; 0 = one submit per object).
+// While one context's batch uploads, the next batch is read into the other context.
+struct SnapshotUploadBatch {
+    std::array<SnapshotStagingContext, 2> contexts;
+    size_t current = 0;
+    VkDeviceSize batchBytes = 0;
+    uint64_t items = 0;
+    uint64_t bytes = 0;
+    uint64_t submits = 0;
+};
+
+SnapshotUploadBatch createSnapshotUploadBatch(StateBlock* stateBlock);
+// Submits the open batch, waits for all uploads and frees the staging.
+void destroySnapshotUploadBatch(StateBlock* stateBlock, SnapshotUploadBatch* batch);
 
 SnapshotStagingContext createSnapshotStagingContext(StateBlock* stateBlock);
 void destroySnapshotStagingContext(StateBlock* stateBlock,
@@ -52,7 +74,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                       SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo);
 bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
-                      SnapshotStagingContext* staging, VkImage image,
+                      SnapshotUploadBatch* batch, VkImage image,
                       const ImageInfo* imageInfo);
 bool saveBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                        SnapshotStagingContext* staging, VkBuffer buffer,
@@ -63,7 +85,7 @@ void setEventInQueue(StateBlock* stateBlock, VkEvent event, uint64_t eventflags)
 void signalSemaphore(StateBlock* stateBlock, VkSemaphore unboxed_semaphore);
 
 bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
-                      SnapshotStagingContext* staging, VkBuffer buffer,
+                      SnapshotUploadBatch* batch, VkBuffer buffer,
                       const BufferInfo* bufferInfo);
 }  // namespace vk
 }  // namespace host

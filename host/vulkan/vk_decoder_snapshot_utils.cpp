@@ -14,6 +14,10 @@
 
 #include "vk_decoder_snapshot_utils.h"
 
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+
 #include "gfxstream/common/logging.h"
 #include "vk_common_operations.h"
 #include "vk_decoder_global_state.h"
@@ -206,6 +210,112 @@ bool ensureSnapshotStagingCapacity(StateBlock* stateBlock, SnapshotStagingContex
     return true;
 }
 
+namespace {
+
+// Base alignment of each object's data in a batch: a multiple of every texel size (1, 2, 3, 4,
+// 6, 8, 12, 16 bytes) and of the copy offset alignments drivers ask for.
+constexpr VkDeviceSize kUploadAlignment = 768;
+
+VkDeviceSize snapshotUploadBatchBytes() {
+    static const VkDeviceSize bytes = [] {
+        const char* env = getenv("GFXSTREAM_SNAPSHOT_UPLOAD_BATCH_MB");
+        long mb = env && *env ? strtol(env, nullptr, 10) : 32;
+        return static_cast<VkDeviceSize>(mb > 0 ? mb : 0) << 20;
+    }();
+    return bytes;
+}
+
+bool submitSnapshotUpload(StateBlock* stateBlock, SnapshotUploadBatch* batch,
+                          SnapshotStagingContext* staging) {
+    if (!staging->recording) {
+        return true;
+    }
+    VulkanDispatch* dispatch = stateBlock->deviceDispatch;
+    staging->recording = false;
+    VK_RETURN_FALSE_ON_ERROR(dispatch->vkEndCommandBuffer(staging->commandBuffer));
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &staging->commandBuffer,
+    };
+    VK_RETURN_FALSE_ON_ERROR(
+        dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
+    // waited for when the context is used next, so the next batch's read overlaps this upload
+    staging->pending = true;
+    batch->submits++;
+    return true;
+}
+
+// Returns the context to record an upload into, with its command buffer begun, and the offset
+// of `size` free bytes in its staging buffer.
+bool reserveSnapshotUpload(StateBlock* stateBlock, SnapshotUploadBatch* batch, VkDeviceSize size,
+                           SnapshotStagingContext** outStaging, VkDeviceSize* outOffset) {
+    SnapshotStagingContext* staging = &batch->contexts[batch->current];
+    if (staging->recording) {
+        VkDeviceSize offset = (staging->used + kUploadAlignment - 1) & ~(kUploadAlignment - 1);
+        if (batch->batchBytes > 0 && offset + size <= staging->capacity) {
+            staging->used = offset + size;
+            batch->items++;
+            batch->bytes += size;
+            *outStaging = staging;
+            *outOffset = offset;
+            return true;
+        }
+        if (!submitSnapshotUpload(stateBlock, batch, staging)) {
+            return false;
+        }
+        batch->current ^= 1;
+        staging = &batch->contexts[batch->current];
+    }
+    if (!finishSnapshotTransfer(stateBlock, staging)) {
+        return false;
+    }
+    if (!ensureSnapshotStagingCapacity(stateBlock, staging, std::max(size, batch->batchBytes))) {
+        return false;
+    }
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    if (stateBlock->deviceDispatch->vkBeginCommandBuffer(staging->commandBuffer, &beginInfo) !=
+        VK_SUCCESS) {
+        GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
+        return false;
+    }
+    staging->recording = true;
+    staging->used = size;
+    batch->items++;
+    batch->bytes += size;
+    *outStaging = staging;
+    *outOffset = 0;
+    return true;
+}
+
+}  // namespace
+
+SnapshotUploadBatch createSnapshotUploadBatch(StateBlock* stateBlock) {
+    SnapshotUploadBatch batch;
+    batch.contexts[0] = createSnapshotStagingContext(stateBlock);
+    batch.contexts[1] = createSnapshotStagingContext(stateBlock);
+    batch.batchBytes = snapshotUploadBatchBytes();
+    return batch;
+}
+
+void destroySnapshotUploadBatch(StateBlock* stateBlock, SnapshotUploadBatch* batch) {
+    for (auto& staging : batch->contexts) {
+        if (!submitSnapshotUpload(stateBlock, batch, &staging)) {
+            GFXSTREAM_FATAL("Failed to submit the last snapshot load uploads");
+        }
+    }
+    for (auto& staging : batch->contexts) {
+        destroySnapshotStagingContext(stateBlock, &staging);
+    }
+    GFXSTREAM_DEBUG("snapshot load: uploaded %llu objects, %.1f MB in %llu submits (batch %llu MB)",
+                    static_cast<unsigned long long>(batch->items), batch->bytes / 1048576.0,
+                    static_cast<unsigned long long>(batch->submits),
+                    static_cast<unsigned long long>(batch->batchBytes >> 20));
+}
+
 bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                       SnapshotStagingContext* staging, VkImage image,
                       const ImageInfo* imageInfo) {
@@ -350,7 +460,7 @@ bool saveImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
 }
 
 bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
-                      SnapshotStagingContext* staging, VkImage image,
+                      SnapshotUploadBatch* batch, VkImage image,
                       const ImageInfo* imageInfo) {
     const bool validImage = (stream->getBe32() == kGoodImageSnapshot);
     if (!validImage) {
@@ -364,13 +474,14 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     if (!getFormatTransferInfo(imageCreateInfo.format, imageCreateInfo.extent, &transferInfo)) {
         return true;
     }
-    if (!finishSnapshotTransfer(stateBlock, staging)) {
-        return false;
-    }
-    VkCommandBuffer commandBuffer = staging->commandBuffer;
-    VkFence fence = staging->fence;
 
     if (imageInfo->imageCreateInfoShallow.samples != VK_SAMPLE_COUNT_1_BIT) {
+        SnapshotStagingContext* staging = nullptr;
+        VkDeviceSize unusedOffset = 0;
+        if (!reserveSnapshotUpload(stateBlock, batch, 0, &staging, &unusedOffset)) {
+            return false;
+        }
+        VkCommandBuffer commandBuffer = staging->commandBuffer;
         // Set the layout and quit
         // TODO: resolve and save image content
         getFormatTransferInfo(imageCreateInfo.format, imageCreateInfo.extent, &transferInfo);
@@ -393,25 +504,9 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                                                         .levelCount = VK_REMAINING_MIP_LEVELS,
                                                         .baseArrayLayer = 0,
                                                         .layerCount = VK_REMAINING_ARRAY_LAYERS}};
-        VkCommandBufferBeginInfo beginInfo{
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        };
-        VK_CHECK(dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo));
-
         dispatch->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0,
                                        nullptr, 1, &imgMemoryBarrier);
-
-        VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-
-        // Execute the command to copy image
-        VkSubmitInfo submitInfo = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &commandBuffer,
-        };
-        VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-        staging->pending = true;
         return true;
     }
     // Region bases match the save path's.
@@ -436,11 +531,14 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                             ~(kRegionAlignment - 1);
         }
     }
-    if (!ensureSnapshotStagingCapacity(stateBlock, staging, stagingNeeded)) {
+    SnapshotStagingContext* staging = nullptr;
+    VkDeviceSize batchOffset = 0;
+    if (!reserveSnapshotUpload(stateBlock, batch, stagingNeeded, &staging, &batchOffset)) {
         return false;
     }
+    VkCommandBuffer commandBuffer = staging->commandBuffer;
 
-    VkDeviceSize regionBase = 0;
+    VkDeviceSize regionBase = batchOffset;
     for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
         for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
             // Require the serialized size to match the expected per-mip transfer size.
@@ -453,15 +551,7 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         }
     }
 
-    VkCommandBufferBeginInfo beginInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
-        return false;
-    }
-
-    regionBase = 0;
+    regionBase = batchOffset;
     for (uint32_t mipLevel = 0; mipLevel < mipLevels; mipLevel++) {
         for (uint32_t arrayLayer = 0; arrayLayer < arrayLayers; arrayLayer++) {
             TransferInfo& mipmapTransferInfo =
@@ -516,16 +606,6 @@ bool loadImageContent(gfxstream::Stream* stream, StateBlock* stateBlock,
                 ~(kRegionAlignment - 1);
         }
     }
-    VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-
-    VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-    };
-    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, fence));
-    // waited for when the context is used next, so the next image's read overlaps this upload
-    staging->pending = true;
     return true;
 }
 
@@ -647,7 +727,7 @@ void signalSemaphore(StateBlock* stateBlock, VkSemaphore unboxed_semaphore) {
 }
 
 bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
-                      SnapshotStagingContext* staging, VkBuffer buffer,
+                      SnapshotUploadBatch* batch, VkBuffer buffer,
                       const BufferInfo* bufferInfo) {
     VkBufferUsageFlags requiredUsages =
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -656,11 +736,10 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     }
     VulkanDispatch* dispatch = stateBlock->deviceDispatch;
 
-    if (!finishSnapshotTransfer(stateBlock, staging)) {
-        return false;
-    }
-    if (!ensureSnapshotStagingCapacity(stateBlock, staging,
-                                       static_cast<VkDeviceSize>(bufferInfo->size))) {
+    SnapshotStagingContext* staging = nullptr;
+    VkDeviceSize batchOffset = 0;
+    if (!reserveSnapshotUpload(stateBlock, batch, static_cast<VkDeviceSize>(bufferInfo->size),
+                               &staging, &batchOffset)) {
         return false;
     }
     VkCommandBuffer commandBuffer = staging->commandBuffer;
@@ -670,21 +749,14 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
         GFXSTREAM_ERROR("Failed to read buffer on snapshot load");
         return false;
     }
-    stream->read(staging->mapped, bufferInfo->size);
+    stream->read(static_cast<char*>(staging->mapped) + batchOffset, bufferInfo->size);
 
     VkBufferCopy bufferCopy = {
-        .srcOffset = 0,
+        .srcOffset = batchOffset,
         .dstOffset = 0,
         .size = bufferInfo->size,
     };
 
-    VkCommandBufferBeginInfo beginInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    if (dispatch->vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        GFXSTREAM_ERROR("Failed to start command buffer on snapshot load");
-        return false;
-    }
     dispatch->vkCmdCopyBuffer(commandBuffer, staging->buffer, buffer, 1, &bufferCopy);
     VkBufferMemoryBarrier barrier{.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
                                   .pNext = nullptr,
@@ -698,16 +770,6 @@ bool loadBufferContent(gfxstream::Stream* stream, StateBlock* stateBlock,
     dispatch->vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 1, &barrier,
                                    0, nullptr);
-
-    // Execute the command to copy buffer
-    VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-    };
-    VK_CHECK(dispatch->vkEndCommandBuffer(commandBuffer));
-    VK_CHECK(dispatch->vkQueueSubmit(stateBlock->queue, 1, &submitInfo, staging->fence));
-    staging->pending = true;
     return true;
 }
 

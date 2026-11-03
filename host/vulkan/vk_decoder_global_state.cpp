@@ -1210,38 +1210,28 @@ class VkDecoderGlobalState::Impl {
 
             // Set up VK structs to snapshot other Vulkan objects
             std::unordered_map<VkDevice, StateBlock> snapshotStateBlocks;
-            // Two contexts per device: the next content is read while the previous uploads.
-            struct StagingPair {
-                std::array<SnapshotStagingContext, 2> contexts;
-                size_t next = 0;
-            };
-            std::unordered_map<VkDevice, StagingPair> snapshotStagings;
+            // Uploads of a device are batched: many objects per submit, and the next batch is
+            // read while the previous one uploads.
+            std::unordered_map<VkDevice, SnapshotUploadBatch> snapshotStagings;
             auto snapshotScratchFor = [&](VkDevice device) {
                 struct Scratch {
                     StateBlock* stateBlock;
-                    SnapshotStagingContext* staging;
+                    SnapshotUploadBatch* staging;
                 };
                 auto stateBlockIt = snapshotStateBlocks.find(device);
                 if (stateBlockIt == snapshotStateBlocks.end()) {
                     stateBlockIt =
                         snapshotStateBlocks.emplace(device, createSnapshotStateBlock(device)).first;
-                    snapshotStagings.emplace(
-                        device,
-                        StagingPair{{createSnapshotStagingContext(&stateBlockIt->second),
-                                     createSnapshotStagingContext(&stateBlockIt->second)}});
+                    snapshotStagings.emplace(device,
+                                             createSnapshotUploadBatch(&stateBlockIt->second));
                 }
-                StagingPair& pair = snapshotStagings.find(device)->second;
-                SnapshotStagingContext* staging = &pair.contexts[pair.next];
-                pair.next ^= 1;
-                return Scratch{&stateBlockIt->second, staging};
+                return Scratch{&stateBlockIt->second, &snapshotStagings.find(device)->second};
             };
             auto releaseSnapshotScratch = [&]() {
-                for (auto& [device, pair] : snapshotStagings) {
+                for (auto& [device, batch] : snapshotStagings) {
                     auto stateBlockIt = snapshotStateBlocks.find(device);
                     if (stateBlockIt != snapshotStateBlocks.end()) {
-                        for (auto& staging : pair.contexts) {
-                            destroySnapshotStagingContext(&stateBlockIt->second, &staging);
-                        }
+                        destroySnapshotUploadBatch(&stateBlockIt->second, &batch);
                     }
                 }
                 for (auto& [device, stateBlock] : snapshotStateBlocks) {
