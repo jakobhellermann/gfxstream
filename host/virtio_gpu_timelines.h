@@ -14,6 +14,7 @@
 #ifndef VIRTIO_GPU_TIMELINES_H
 #define VIRTIO_GPU_TIMELINES_H
 
+#include <optional>
 #include <atomic>
 #include <functional>
 #include <list>
