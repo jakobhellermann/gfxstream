@@ -76,6 +76,7 @@ void BoxedHandleManager::replayHandles(std::vector<BoxedHandle> handles) {
 void BoxedHandleManager::clear() {
     std::lock_guard<std::mutex> lock(mMutex);
     mReverseMap.clear();
+    mCreatedSinceClear.clear();
     mStore.clear();
 }
 
@@ -99,6 +100,7 @@ BoxedHandle BoxedHandleManager::add(const BoxedHandleInfo& item, BoxedHandleType
 
     std::lock_guard<std::mutex> lock(mMutex);
     mReverseMap[(BoxedHandle)(item.underlying)] = handle;
+    mCreatedSinceClear.insert(handle);
     return handle;
 }
 
@@ -116,9 +118,12 @@ void BoxedHandleManager::update(BoxedHandle handle, const BoxedHandleInfo& item,
 
 void BoxedHandleManager::remove(BoxedHandle h) {
     auto item = get(h);
-    if (item) {
+    {
         std::lock_guard<std::mutex> lock(mMutex);
-        mReverseMap.erase((UnboxedHandle)(item->underlying));
+        if (item) {
+            mReverseMap.erase((UnboxedHandle)(item->underlying));
+        }
+        mCreatedSinceClear.erase(h);
     }
     mStore.remove(h);
 }
@@ -150,8 +155,17 @@ void BoxedHandleManager::processDelayedRemoves(VkDevice device) {
             r.callback();
         }
 
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mCreatedSinceClear.erase(h);
+        }
         mStore.remove(h);
     }
+}
+
+bool BoxedHandleManager::createdSinceClear(BoxedHandle handle) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    return mCreatedSinceClear.count(handle) != 0;
 }
 
 BoxedHandleInfo* BoxedHandleManager::get(BoxedHandle handle) {

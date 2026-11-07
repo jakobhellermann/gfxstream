@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <mutex>
+#include <unordered_set>
 #include <vector>
 
 #include "vulkan_dispatch.h"
@@ -107,6 +108,11 @@ class BoxedHandleManager {
     BoxedHandleInfo* get(BoxedHandle handle);
     BoxedHandle getBoxedFromUnboxed(UnboxedHandle unboxed);
 
+    // Whether the handle was added after the last clear() and not removed since. clear() keeps the
+    // slots' items and bumps their generations, so get() alone can return an item of an object that
+    // existed before the clear (a snapshot load).
+    bool createdSinceClear(BoxedHandle handle);
+
     void replayHandles(std::vector<BoxedHandle> handles);
 
     void clear();
@@ -118,6 +124,7 @@ class BoxedHandleManager {
 
     mutable std::mutex mMutex;
     std::unordered_map<UnboxedHandle, BoxedHandle> mReverseMap GUARDED_BY(mMutex);
+    std::unordered_set<BoxedHandle> mCreatedSinceClear GUARDED_BY(mMutex);
 
     struct DelayedRemove {
         BoxedHandle handle;
